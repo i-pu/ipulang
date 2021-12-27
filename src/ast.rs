@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn test_fn2() {
-        let code = "fn h0Ge( ) { 1 ; }";
+        let code = "fn  h0Ge() { 1 ; }";
         let expect = FunctionDecl::new(
             "h0Ge".to_owned(),
             Stmts::new(vec![Stmt::Expr(Expr::Const(Const::new(1)))]),

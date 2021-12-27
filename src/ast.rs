@@ -142,8 +142,8 @@ pub fn stmts_parser(s: &str) -> IResult<&str, Stmts> {
     Ok((s, Stmts::new(stmts)))
 }
 
-pub fn program_parser(s: &str) -> Expr {
-    let (ss, ast) = expr_parser(s).unwrap();
+pub fn program_parser(s: &str) -> FunctionDecl {
+    let (ss, ast) = function_decl_parser(s).unwrap();
     assert_eq!(ss, "", "program parser must consume all string");
     ast
 }

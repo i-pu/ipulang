@@ -22,15 +22,16 @@ struct Args {
 }
 
 fn main() {
-    codegen::jit_compile().unwrap();
+    // codegen::jit_compile().unwrap();
 
-    // let args = Args::parse();
+    let args = Args::parse();
 
-    // dbg!("{}", &args.file);
-    // dbg!("{}", &args.output);
-    // let code = fs::read_to_string(&args.file).unwrap();
+    dbg!("{}", &args.file);
+    dbg!("{}", &args.output);
+    let code = fs::read_to_string(&args.file).unwrap();
 
-    // let ast = ast::program_parser(&code);
+    let ast = ast::program_parser(&code);
+    dbg!(&ast);
 
     // let bin = ast.gen_code();
     // fs::write(&args.output, bin).unwrap();

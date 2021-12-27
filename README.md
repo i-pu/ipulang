@@ -9,9 +9,13 @@
 - [x] nomでASTにする
 - [x] LLVM IRを理解する
     - `inkwell` を使う
-- [ ] 変数機能
-    - [ ] parser
-    - [ ] node
+- [] 変数機能
+    - [x] parser
+    - [x] node
+    - [ ] codegen
+- [] 関数宣言
+    - [x] parser
+    - [x] node
     - [ ] codegen
 
 ## マイルストーン
@@ -19,6 +23,10 @@
     - [x] cmmを理解する
     - [x] pl0を理解する
     - [x] 定数をパースできる
+    - [x] 四則演算をパースできる
+    - [x] 変数を宣言, 使用できる
+    - [x] 関数を宣言できる
+    
 - [ ] LLVM IRコード生成
 
 ### LLVM IR勉強会

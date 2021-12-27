@@ -321,4 +321,23 @@ mod tests {
             assert_eq!(result, Ok(("", expr)));
         }
     }
+
+    #[test]
+    fn test_fn1() {
+        let code = "fn main( ) { }";
+        let expect = FunctionDecl::new("main".to_owned(), Stmts::new(vec![]));
+        let result = function_decl_parser(code);
+        assert_eq!(result, Ok(("", expect)));
+    }
+
+    #[test]
+    fn test_fn2() {
+        let code = "fn h0Ge( ) { 1 ; }";
+        let expect = FunctionDecl::new(
+            "h0Ge".to_owned(),
+            Stmts::new(vec![Stmt::Expr(Expr::Const(Const::new(1)))]),
+        );
+        let result = function_decl_parser(code);
+        assert_eq!(result, Ok(("", expect)));
+    }
 }

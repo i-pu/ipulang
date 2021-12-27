@@ -16,7 +16,6 @@ use crate::nodes::*;
 
 pub fn compile(code: String) -> Result<String, Box<Error>> {
     let ast = program_parser(&code);
-
     let context = Context::create();
     let mut env = Env::new(&context);
     ast.gen_code(&mut env);
@@ -94,10 +93,19 @@ impl VariableDecl {
     fn gen_code<'a>(self, env: &mut Env<'a>) {
         dbg!(&self);
         let i32_type = env.ctx.i32_type();
-        let zero = i32_type.const_int(0, false);
-        let ptr: PointerValue = env.builder.build_alloca(i32_type, &self.0);
-        env.builder.build_store(ptr, zero);
-        env.variables.insert(self.0.clone(), ptr);
+        if let Some(init) = self.init {
+            let tmp_ptr = init.gen_code(env);
+            env.var_count += 1;
+            let tmp = env.builder.build_load(tmp_ptr, &env.var_count.to_string());
+            let ptr: PointerValue = env.builder.build_alloca(i32_type, &self.id);
+            env.builder.build_store(ptr, tmp.into_int_value());
+            env.variables.insert(self.id.clone(), ptr);
+        } else {
+            let ptr: PointerValue = env.builder.build_alloca(i32_type, &self.id);
+            let zero = i32_type.const_int(0, false);
+            env.builder.build_store(ptr, zero);
+            env.variables.insert(self.id.clone(), ptr);
+        }
         dbg!("end: VariableDecl");
     }
 }
@@ -172,6 +180,14 @@ impl Stmts {
     fn gen_code<'a>(self, env: &mut Env<'a>) {
         for stmt in self.0 {
             stmt.gen_code(env);
+        }
+    }
+}
+
+impl Program {
+    fn gen_code<'a>(self, env: &mut Env<'a>) {
+        for function in self.0 {
+            function.gen_code(env);
         }
     }
 }

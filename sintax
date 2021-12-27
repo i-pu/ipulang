@@ -11,7 +11,7 @@
 <expr>       := <term> [ ('+'|'-') <expr> ]
 <term>       := <factor> [ ('*'|'/') <term> ]
 <factor>     := <variable_val> | <const_val> | <paren_expr>
-<var_decl>   := var ID ';'
+<var_decl>   := 'var' ID (= <const_val>)? ';'
 <paren_expr> := '(' <expr> ')'
 
 <const_val> := 0 | [1-9][0-9]*

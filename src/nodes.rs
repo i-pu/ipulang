@@ -40,10 +40,13 @@ pub enum Expr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VariableDecl(pub String);
+pub struct VariableDecl {
+    pub id: String,
+    pub init: Option<Expr>,
+}
 impl VariableDecl {
-    pub fn new(id: String) -> Self {
-        VariableDecl(id)
+    pub fn new(id: String, init: Option<Expr>) -> Self {
+        VariableDecl { id, init }
     }
 }
 
@@ -83,5 +86,11 @@ pub enum Stmt {
     VariableDecl(VariableDecl),
 }
 
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub struct Stmts(pub Vec<Stmt>);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Program(pub Vec<FunctionDecl>);
+
+impl Program {
+    pub fn new(functions: Vec<FunctionDecl>) -> Self {
+        Self(functions)
+    }
+}

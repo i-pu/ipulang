@@ -1,0 +1,10 @@
+
+fn a() {
+    return 0;
+}
+
+fn main() {
+    var a = 6;
+    var b = (2 + a) * 4 / 1;
+    return b;
+}

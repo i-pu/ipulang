@@ -5,12 +5,14 @@ use nom::{
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, char, digit1, multispace0, multispace1, one_of},
     combinator::{map, opt},
-    multi::many0,
+    multi::{many0, many1},
     sequence::{delimited, tuple},
     IResult,
 };
 
-use crate::nodes::{BinOp, Const, Expr, FunctionDecl, Op, Stmt, Stmts, Variable, VariableDecl};
+use crate::nodes::{
+    BinOp, Const, Expr, FunctionDecl, Op, Program, Stmt, Stmts, Variable, VariableDecl,
+};
 
 /// "64hoge" -> hoge, <64>
 pub fn const_parser(s: &str) -> IResult<&str, Expr> {
@@ -34,8 +36,20 @@ pub fn var_parser(s: &str) -> IResult<&str, Variable> {
 
 // 変数宣言
 pub fn var_decl_parser(s: &str) -> IResult<&str, VariableDecl> {
-    let (s, (_, _, name, _)) = tuple((tag("var"), multispace1, var_name_parser, char(';')))(s)?;
-    Ok((s, VariableDecl::new(name.to_owned())))
+    let (s, (_, _, name, opt_init, _)) = tuple((
+        tag("var"),
+        multispace1,
+        var_name_parser,
+        map(
+            opt(tuple((
+                delimited(multispace0, char('='), multispace0),
+                expr_parser,
+            ))),
+            |opt| opt.map(|a| a.1),
+        ),
+        char(';'),
+    ))(s)?;
+    Ok((s, VariableDecl::new(name.to_owned(), opt_init)))
 }
 
 // 関数宣言
@@ -148,10 +162,10 @@ pub fn stmts_parser(s: &str) -> IResult<&str, Stmts> {
     Ok((s, Stmts::new(stmts)))
 }
 
-pub fn program_parser(s: &str) -> FunctionDecl {
-    let (ss, ast) = function_decl_parser(s).unwrap();
+pub fn program_parser(s: &str) -> Program {
+    let (ss, ast) = many1(delimited(multispace0, function_decl_parser, multispace0))(s).unwrap();
     assert_eq!(ss, "", "program parser must consume all string");
-    ast
+    Program::new(ast)
 }
 
 #[cfg(test)]
@@ -242,7 +256,7 @@ mod tests {
     #[test]
     fn test_vardecl1() {
         let codes: Vec<&str> = vec!["var a;", "var   a;"];
-        let expect_expr: VariableDecl = VariableDecl::new("a".to_owned());
+        let expect_expr: VariableDecl = VariableDecl::new("a".to_owned(), None);
         for code in codes {
             let result = var_decl_parser(code);
             assert_eq!(result, Ok(("", expect_expr.clone())));
@@ -251,7 +265,7 @@ mod tests {
     #[test]
     fn test_vardecl2() {
         let codes: Vec<&str> = vec!["var ababaAFAF;", "var   ababaAFAF;"];
-        let expect_expr: VariableDecl = VariableDecl::new("ababaAFAF".to_owned());
+        let expect_expr: VariableDecl = VariableDecl::new("ababaAFAF".to_owned(), None);
         for code in codes {
             let result = var_decl_parser(code);
             assert_eq!(result, Ok(("", expect_expr.clone())));
@@ -298,11 +312,11 @@ mod tests {
                 Stmt::Expr(Expr::Const(Const::new(2))),
             ]),
             Stmts::new(vec![
-                Stmt::VariableDecl(VariableDecl::new("a".to_owned())), // var a;
-                Stmt::VariableDecl(VariableDecl::new("b".to_owned())), // var b;
+                Stmt::VariableDecl(VariableDecl::new("a".to_owned(), None)), // var a;
+                Stmt::VariableDecl(VariableDecl::new("b".to_owned(), None)), // var b;
             ]),
             Stmts::new(vec![
-                Stmt::VariableDecl(VariableDecl::new("a".to_owned())), // var a;
+                Stmt::VariableDecl(VariableDecl::new("a".to_owned(), None)), // var a;
                 Stmt::Expr(Expr::BinOp(Box::new(BinOp::new(
                     Expr::BinOp(Box::new(
                         BinOp::new(

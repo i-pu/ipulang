@@ -13,18 +13,19 @@
     - [x] parser
     - [x] node
     - [x] codegen
+    - [x] 変数初期化
     - [ ] assing
-- [ ] 関数宣言
+- [x] 関数宣言
     - [x] parser
     - [x] node
     - [x] codegen
     - [x] main関数宣言
-    - [ ] main以外の関数宣言
+    - [x] main以外の関数宣言
     - [x] return文
 - [ ] ビルトイン関数
     - [ ] print
 - [ ] 構文追加
-    - [ ] return
+    - [x] return
     - [ ] 関数呼び出し
     - [ ] if
     - [ ] for

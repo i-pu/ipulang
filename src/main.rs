@@ -5,8 +5,6 @@ use clap::Parser;
 mod ast;
 mod codegen;
 mod nodes;
-
-use nodes::Node;
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[clap(about, version, author)]
@@ -22,17 +20,13 @@ struct Args {
 }
 
 fn main() {
-    // codegen::jit_compile().unwrap();
-
     let args = Args::parse();
 
-    dbg!("{}", &args.file);
-    dbg!("{}", &args.output);
+    dbg!(&args.file);
+    dbg!(&args.output);
     let code = fs::read_to_string(&args.file).unwrap();
-
-    let ast = ast::program_parser(&code);
-    dbg!(&ast);
+    let ir = codegen::compile(code).unwrap();
 
     // let bin = ast.gen_code();
-    // fs::write(&args.output, bin).unwrap();
+    fs::write(&args.output, ir).unwrap();
 }

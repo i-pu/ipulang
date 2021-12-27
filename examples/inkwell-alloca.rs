@@ -48,6 +48,7 @@ pub fn main() -> Result<(), Box<Error>> {
 
     // TODO: code gen
     // code_gen(&context, &builder);
+
     builder.build_return(Some(&d));
 
     // module.print_to_stderr();

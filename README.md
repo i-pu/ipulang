@@ -9,14 +9,25 @@
 - [x] nomでASTにする
 - [x] LLVM IRを理解する
     - `inkwell` を使う
-- [] 変数機能
+- [x] 変数機能
     - [x] parser
     - [x] node
-    - [ ] codegen
-- [] 関数宣言
+    - [x] codegen
+    - [ ] assing
+- [ ] 関数宣言
     - [x] parser
     - [x] node
-    - [ ] codegen
+    - [x] codegen
+    - [x] main関数宣言
+    - [ ] main以外の関数宣言
+    - [ ] return文
+- [ ] ビルトイン関数
+    - [ ] print
+- [ ] 構文追加
+    - [ ] 関数呼び出し
+    - [ ] if
+    - [ ] for
+- [ ] include
 
 ## マイルストーン
 - [x] 定数, 四則演算が出来る
@@ -25,15 +36,10 @@
     - [x] 定数をパースできる
     - [x] 四則演算をパースできる
     - [x] 変数を宣言, 使用できる
-    - [x] 関数を宣言できる
-    
-- [ ] LLVM IRコード生成
+    - [x] main関数を宣言できる
+- [x] LLVM IRコード生成
 
-### LLVM IR勉強会
+### LLVM fix
 ```shell
 apt install libclang-common-12-dev llvm-12
-```
-
-```
-
 ```

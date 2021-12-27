@@ -7,8 +7,12 @@
 - [x] CLIにする
     - [x] `cargo run -- <input> --output <output>`
 - [x] nomでASTにする
-- [ ] LLVM IRを理解する
+- [x] LLVM IRを理解する
     - `inkwell` を使う
+- [ ] 変数機能
+    - [ ] parser
+    - [ ] node
+    - [ ] codegen
 
 ## マイルストーン
 - [x] 定数, 四則演算が出来る

@@ -1,0 +1,5 @@
+<expr>       := <term> [ ('+'|'-') <expr> ]
+<term>       := <factor> [ ('*'|'/') <term> ]
+<factor>     := <const_val> | <paren_expr>
+<paren_expr> := '(' <expr> ')'
+<const_val>  := 1つ以上の数字列

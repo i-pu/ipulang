@@ -1,0 +1,12 @@
+[package]
+name = "ipulang"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+nom = "7"
+clap = { version = "3.0.0-rc.8", features = ["derive"] }
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm12-0"] }

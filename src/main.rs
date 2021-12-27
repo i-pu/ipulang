@@ -22,8 +22,6 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    dbg!(&args.file);
-    dbg!(&args.output);
     let code = fs::read_to_string(&args.file).unwrap();
     let ir = codegen::compile(code).unwrap();
 

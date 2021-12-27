@@ -1,0 +1,8 @@
+fn f(a , b) {
+    TODO: 引数をallocaする
+    return 0;
+}
+
+fn main() {
+    return f(1, 0);
+}

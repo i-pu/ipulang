@@ -2,16 +2,18 @@ use std::str::FromStr;
 
 use nom::{
     branch::alt,
+    branch::permutation,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, char, digit1, multispace0, multispace1, one_of},
-    combinator::{map, opt},
-    multi::{many0, many1},
-    sequence::{delimited, tuple},
+    combinator::{cut, map, opt},
+    multi::{many0, many1, separated_list0},
+    sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
 
 use crate::nodes::{
-    BinOp, Const, Expr, FunctionDecl, Op, Program, Stmt, Stmts, Variable, VariableDecl,
+    Assing, BinOp, Call, Const, Expr, FunctionDecl, Op, Program, Stmt, Stmts, Variable,
+    VariableDecl,
 };
 
 /// "64hoge" -> hoge, <64>
@@ -52,25 +54,6 @@ pub fn var_decl_parser(s: &str) -> IResult<&str, VariableDecl> {
     Ok((s, VariableDecl::new(name.to_owned(), opt_init)))
 }
 
-// 関数宣言
-pub fn function_decl_parser(s: &str) -> IResult<&str, FunctionDecl> {
-    let (s, (_, _, name, _, _, _, _, _, _, stmts, _, _)) = tuple((
-        tag("fn"),
-        multispace1,
-        var_name_parser,
-        char('('),
-        multispace0,
-        char(')'),
-        multispace0,
-        char('{'),
-        multispace0,
-        stmts_parser,
-        multispace0,
-        char('}'),
-    ))(s)?;
-    Ok((s, FunctionDecl::new(name.to_owned(), stmts)))
-}
-
 // 加減算
 pub fn op1_parser(s: &str) -> IResult<&str, Op> {
     // dbg!("op_parser");
@@ -96,18 +79,34 @@ pub fn op2_parser(s: &str) -> IResult<&str, Op> {
 }
 
 pub fn paren_expr_parser(s: &str) -> IResult<&str, Expr> {
+    delimited(char('('), expr_parser, char(')'))(s)
+}
+
+pub fn call_parser(s: &str) -> IResult<&str, Call> {
     map(
-        tuple((char('('), expr_parser, char(')'))),
-        |(_, expr, _)| expr,
+        tuple((
+            var_name_parser,
+            delimited(
+                terminated(char('('), multispace0),
+                separated_list0(delimited(multispace0, char(','), multispace0), expr_parser),
+                preceded(multispace0, char(')')),
+            ),
+        )),
+        |(name, args)| Call::new(name, args),
     )(s)
 }
 
 pub fn factor_parser(s: &str) -> IResult<&str, Expr> {
-    alt((
-        const_parser,
-        map(var_parser, |var| Expr::Variable(var)),
-        paren_expr_parser,
-    ))(s)
+    delimited(
+        multispace0,
+        alt((
+            const_parser,
+            paren_expr_parser,
+            map(call_parser, |call| Expr::Call(call)),
+            map(var_parser, |var| Expr::Variable(var)),
+        )),
+        multispace0,
+    )(s)
 }
 
 pub fn term_parser(s: &str) -> IResult<&str, Expr> {
@@ -137,6 +136,15 @@ pub fn expr_parser(s: &str) -> IResult<&str, Expr> {
     )(s)
 }
 
+pub fn assign_parser(s: &str) -> IResult<&str, Assing> {
+    let (s, (id, _, expr)) = tuple((
+        var_name_parser,
+        delimited(multispace0, char('='), multispace0),
+        terminated(expr_parser, terminated(multispace0, char(';'))),
+    ))(s)?;
+    Ok((s, Assing::new(id, expr)))
+}
+
 pub fn return_parser(s: &str) -> IResult<&str, Expr> {
     let (s, (_, _, expr, _)) = tuple((tag("return"), multispace1, expr_parser, char(';')))(s)?;
     Ok((s, expr))
@@ -148,6 +156,7 @@ pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
         alt((
             map(var_decl_parser, |v| Stmt::VariableDecl(v)),
             map(return_parser, |r| Stmt::Return(r)),
+            map(assign_parser, |a| Stmt::Assing(a)),
             map(
                 tuple((expr_parser, multispace0, char(';'))),
                 |(expr, _, _)| Stmt::Expr(expr),
@@ -160,6 +169,31 @@ pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
 pub fn stmts_parser(s: &str) -> IResult<&str, Stmts> {
     let (s, stmts) = many0(stmt_parser)(s)?;
     Ok((s, Stmts::new(stmts)))
+}
+
+// pub fn trim_parser(s: &str, keyword: &str) -> IResult<&str, String> {
+//     delimited(multispace0, tag(keyword), multispace0)(s)
+// }
+
+// 関数宣言
+// TODO: みづらい
+pub fn function_decl_parser(s: &str) -> IResult<&str, FunctionDecl> {
+    let (s, (name, params, stmts)) = tuple((
+        preceded(tuple((tag("fn"), multispace1)), var_name_parser),
+        preceded(
+            tuple((char('('), multispace0)),
+            separated_list0(
+                delimited(multispace0, char(','), multispace0),
+                var_name_parser,
+            ),
+        ),
+        delimited(
+            tuple((multispace0, char(')'), multispace0, char('{'), multispace0)),
+            stmts_parser,
+            tuple((multispace0, char('}'))),
+        ),
+    ))(s)?;
+    Ok((s, FunctionDecl::new(name.to_owned(), params.len(), stmts)))
 }
 
 pub fn program_parser(s: &str) -> Program {
@@ -343,9 +377,26 @@ mod tests {
     }
 
     #[test]
+    fn stmt_test() {
+        let codes: Vec<&str> = vec![
+            "1;",
+            "var a;",
+            "var a = 1;",
+            "var a = 1 + 2;",
+            "a;",
+            "f();",
+            "f( ) + 1;",
+        ];
+        for code in codes {
+            let (rest, _) = stmt_parser(code).unwrap();
+            assert_eq!(rest, "", "\n=== code: {} ===", code);
+        }
+    }
+
+    #[test]
     fn test_fn1() {
         let code = "fn main( ) { }";
-        let expect = FunctionDecl::new("main".to_owned(), Stmts::new(vec![]));
+        let expect = FunctionDecl::new("main".to_owned(), 0, Stmts::new(vec![]));
         let result = function_decl_parser(code);
         assert_eq!(result, Ok(("", expect)));
     }
@@ -355,9 +406,56 @@ mod tests {
         let code = "fn  h0Ge() { 1 ; }";
         let expect = FunctionDecl::new(
             "h0Ge".to_owned(),
+            0,
             Stmts::new(vec![Stmt::Expr(Expr::Const(Const::new(1)))]),
         );
         let result = function_decl_parser(code);
         assert_eq!(result, Ok(("", expect)));
+    }
+
+    #[test]
+    fn call_test() {
+        let codes: Vec<&str> = vec![
+            "a()",
+            "a( )",
+            "a(1)",
+            "a( 1, 2 , 3 )",
+            "a(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)",
+        ];
+        for code in codes {
+            let (rest, _) = call_parser(code).unwrap();
+            assert_eq!(rest, "");
+        }
+    }
+
+    #[test]
+    fn test_fn_decl() {
+        let codes: Vec<&str> = vec!["fn a() { }", "fn a() { 1; }", "fn a(){}", "fn a( ) { }"];
+
+        for code in codes {
+            let (rest, _) = function_decl_parser(code).unwrap();
+            assert_eq!(rest, "", "=== code: {} ===\n", code);
+        }
+    }
+
+    #[test]
+    fn test_fns() {
+        let codes: Vec<&str> = vec!["fn a() { } fn main() {a();}"];
+
+        let expect = Program::new(vec![
+            FunctionDecl::new("a".to_owned(), 0, Stmts::new(vec![])),
+            FunctionDecl::new(
+                "main".to_owned(),
+                0,
+                Stmts::new(vec![Stmt::Expr(Expr::Call(Call::new(
+                    "a".to_string(),
+                    vec![],
+                )))]),
+            ),
+        ]);
+        for code in codes {
+            let rest = program_parser(code);
+            assert_eq!(rest, expect);
+        }
     }
 }

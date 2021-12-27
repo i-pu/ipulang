@@ -37,6 +37,7 @@ pub enum Expr {
     Const(Const),
     Variable(Variable),
     BinOp(Box<BinOp>),
+    Call(Call),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,12 +71,25 @@ impl Stmts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDecl {
     pub id: String,
+    pub argc: usize,
     pub stmts: Stmts,
 }
 
 impl FunctionDecl {
-    pub fn new(id: String, stmts: Stmts) -> Self {
-        Self { id, stmts }
+    pub fn new(id: String, argc: usize, stmts: Stmts) -> Self {
+        Self { id, argc, stmts }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Call {
+    pub id: String,
+    pub args: Vec<Expr>,
+}
+
+impl Call {
+    pub fn new(id: String, args: Vec<Expr>) -> Self {
+        Self { id, args }
     }
 }
 
@@ -84,6 +98,7 @@ pub enum Stmt {
     Expr(Expr),
     Return(Expr),
     VariableDecl(VariableDecl),
+    Assing(Assing),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,5 +107,17 @@ pub struct Program(pub Vec<FunctionDecl>);
 impl Program {
     pub fn new(functions: Vec<FunctionDecl>) -> Self {
         Self(functions)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Assing {
+    pub left: String,
+    pub right: Expr,
+}
+
+impl Assing {
+    pub fn new(left: String, right: Expr) -> Self {
+        Self { left, right }
     }
 }

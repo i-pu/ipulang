@@ -3,6 +3,7 @@
 - まずは型はintだけ
 
 ## やることリスト
+### Day1
 - [x] nomの理解
 - [x] CLIにする
     - [x] `cargo run -- <input> --output <output>`
@@ -22,14 +23,23 @@
     - [x] main関数宣言
     - [x] main以外の関数宣言
     - [x] return文
-- [ ] ビルトイン関数
-    - [ ] print
 - [ ] 構文追加
     - [x] return
-    - [ ] 関数呼び出し
+    - [x] 関数呼び出し
+        - [x] 引数付きで呼び出す
+          - [ ] 引数のallocaをまだやっていない
     - [ ] if
     - [ ] for
+- [ ] ビルトイン関数
+    - [ ] print
 - [ ] include
+
+### Day2
+- [ ] LSP
+- [ ] syntax highlight
+- [ ] web assembly
+- [ ] 型を導入する
+- [ ] (error tracing)
 
 ## マイルストーン
 - [x] 定数, 四則演算が出来る

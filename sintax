@@ -6,29 +6,18 @@
 <stmt>  :
     = <expr> ';'
     | <var_decl>
+    | <assign>
     | <return> := 'return' <expr> ';'
+<assign> := <variable_val> = <expr> ';'
+<var_decl>   := 'var' ID (= <expr>)? ';'
+<call> = ID '(' <expr>* ')'
 
 <expr>       := <term> [ ('+'|'-') <expr> ]
 <term>       := <factor> [ ('*'|'/') <term> ]
-<factor>     := <variable_val> | <const_val> | <paren_expr>
-<var_decl>   := 'var' ID (= <const_val>)? ';'
+<factor>     := <variable_val> | <const_val> | <paren_expr> | <call>
 <paren_expr> := '(' <expr> ')'
+
 
 <const_val> := 0 | [1-9][0-9]*
 <variable_val> := ID
 ID := [a-zA-Z][a-zA-Z0-9]* 
-
-<call> = ID ( params )
-
-Stmts(Vec<Stmt>)
-enum Stmt {
-    Expr,
-    VariableDecl,
-}
-VariableDecl(String)
-Variable(String)
-
-
-
-Function = {name: String, args_var: vec string(IDS) stmts}
-Call

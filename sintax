@@ -6,6 +6,8 @@
 <stmt>  :
     = <expr> ';'
     | <var_decl>
+    | <return> := 'return' <expr> ';'
+
 <expr>       := <term> [ ('+'|'-') <expr> ]
 <term>       := <factor> [ ('*'|'/') <term> ]
 <factor>     := <variable_val> | <const_val> | <paren_expr>

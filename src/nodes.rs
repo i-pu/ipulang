@@ -63,6 +63,7 @@ impl Stmts {
         Stmts(stmts)
     }
 }
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDecl {
     pub id: String,
@@ -78,5 +79,9 @@ impl FunctionDecl {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
     Expr(Expr),
+    Return(Expr),
     VariableDecl(VariableDecl),
 }
+
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub struct Stmts(pub Vec<Stmt>);

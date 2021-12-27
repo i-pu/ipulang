@@ -123,11 +123,17 @@ pub fn expr_parser(s: &str) -> IResult<&str, Expr> {
     )(s)
 }
 
+pub fn return_parser(s: &str) -> IResult<&str, Expr> {
+    let (s, (_, _, expr, _)) = tuple((tag("return"), multispace1, expr_parser, char(';')))(s)?;
+    Ok((s, expr))
+}
+
 pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
     delimited(
         multispace0,
         alt((
             map(var_decl_parser, |v| Stmt::VariableDecl(v)),
+            map(return_parser, |r| Stmt::Return(r)),
             map(
                 tuple((expr_parser, multispace0, char(';'))),
                 |(expr, _, _)| Stmt::Expr(expr),

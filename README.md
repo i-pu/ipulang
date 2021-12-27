@@ -20,10 +20,11 @@
     - [x] codegen
     - [x] main関数宣言
     - [ ] main以外の関数宣言
-    - [ ] return文
+    - [x] return文
 - [ ] ビルトイン関数
     - [ ] print
 - [ ] 構文追加
+    - [ ] return
     - [ ] 関数呼び出し
     - [ ] if
     - [ ] for

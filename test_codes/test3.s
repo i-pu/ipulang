@@ -9,7 +9,7 @@ main:                                   # @main
 	movl	$0, -4(%rsp)
 	movl	$2, -8(%rsp)
 	movl	$2, -12(%rsp)
-	xorl	%eax, %eax
+	movl	$2, %eax
 	retq
 .Lfunc_end0:
 	.size	main, .Lfunc_end0-main

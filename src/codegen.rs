@@ -142,6 +142,7 @@ impl FunctionDecl {
         // let param0 = main_fn.get_nth_param(0).unwrap().into_int_value();
 
         self.stmts.gen_code(env);
+
         let zero = i32_type.const_int(0, false);
         env.builder.build_return(Some(&zero));
     }
@@ -156,6 +157,12 @@ impl Stmt {
             }
             Stmt::VariableDecl(decl) => {
                 decl.gen_code(env);
+            }
+            Stmt::Return(expr) => {
+                let ptr = expr.gen_code(env);
+                env.var_count += 1;
+                let tmp = env.builder.build_load(ptr, &env.var_count.to_string());
+                env.builder.build_return(Some(&tmp));
             }
         };
     }

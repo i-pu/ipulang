@@ -11,8 +11,8 @@ use nom::{
 };
 
 use crate::nodes::{
-    Assing, BinOp, Call, Const, Expr, FunctionDecl, IfElse, Op, Program, Stmt, Stmts, Variable,
-    VariableDecl,
+    Assign, BinOp, Call, Const, Expr, For, FunctionDecl, IfElse, Op, Program, Stmt, Stmts,
+    Variable, VariableDecl,
 };
 
 /// "64hoge" -> hoge, <64>
@@ -235,13 +235,13 @@ pub fn or_expr_parser(s: &str) -> IResult<&str, Expr> {
     )(s)
 }
 
-pub fn assign_parser(s: &str) -> IResult<&str, Assing> {
+pub fn assign_parser(s: &str) -> IResult<&str, Assign> {
     let (s, (id, _, expr)) = tuple((
         var_name_parser,
         delimited(multispace0, char('='), multispace0),
         terminated(or_expr_parser, terminated(multispace0, char(';'))),
     ))(s)?;
-    Ok((s, Assing::new(id, expr)))
+    Ok((s, Assign::new(id, expr)))
 }
 
 pub fn return_parser(s: &str) -> IResult<&str, Expr> {
@@ -277,6 +277,31 @@ pub fn if_else_parser(s: &str) -> IResult<&str, IfElse> {
         |(_, _, cond, sucess, _, failure)| IfElse::new(cond, sucess, failure),
     )(s)
 }
+pub fn for_parser(s: &str) -> IResult<&str, For> {
+    map(
+        tuple((
+            tag("for"),
+            multispace0,
+            // var_decl, cond, assign
+            delimited(
+                char('('),
+                tuple((
+                    delimited(multispace0, var_decl_parser, multispace0),
+                    delimited(multispace0, or_expr_parser, multispace0),
+                    delimited(multispace0, char(';'), multispace0),
+                    delimited(multispace0, assign_parser, multispace0),
+                )),
+                char(')'),
+            ),
+            delimited(
+                multispace0,
+                delimited(char('{'), stmts_parser, char('}')),
+                multispace0,
+            ),
+        )),
+        |(_, _, (var_decl, cond, _, assign), stmts)| For::new(var_decl, cond, assign, stmts),
+    )(s)
+}
 
 pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
     delimited(
@@ -284,8 +309,9 @@ pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
         alt((
             map(var_decl_parser, |v| Stmt::VariableDecl(v)),
             map(return_parser, |r| Stmt::Return(r)),
-            map(assign_parser, |a| Stmt::Assing(a)),
+            map(assign_parser, |a| Stmt::Assign(a)),
             map(if_else_parser, |i| Stmt::IfElse(i)),
+            map(for_parser, |i| Stmt::For(i)),
             map(
                 tuple((or_expr_parser, multispace0, char(';'))),
                 |(expr, _, _)| Stmt::Expr(expr),
@@ -647,6 +673,20 @@ mod tests {
         ];
         for code in codes {
             let (rest, _) = if_else_parser(code).unwrap();
+            assert_eq!(rest, "", "\n=== code: {} ===\n", code);
+        }
+    }
+    #[test]
+    fn test_for() {
+        let codes: Vec<&str> = vec![
+            "for(var i;i < 10; i = i + 1;){}",
+            "for (var i;i < 10; i = i + 1;){ return 0;}",
+            r#"for (var i; i < 10; i = i + 1;) {
+                a = a + i;
+            }"#,
+        ];
+        for code in codes {
+            let (rest, _) = for_parser(code).unwrap();
             assert_eq!(rest, "", "\n=== code: {} ===\n", code);
         }
     }

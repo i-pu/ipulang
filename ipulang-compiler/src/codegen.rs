@@ -1,4 +1,3 @@
-use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -10,6 +9,7 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
+use inkwell::types::IntType;
 use inkwell::values::BasicMetadataValueEnum;
 use inkwell::values::CallSiteValue;
 use inkwell::values::FunctionValue;
@@ -143,6 +143,7 @@ impl Const {
 impl BinOp {
     fn gen_code<'ctx>(self, env: &mut Env<'ctx>) -> PointerValue<'ctx> {
         let i32_type = env.ctx.i32_type();
+        let bool_type = env.ctx.bool_type();
         let ptr_lhr = self.left.gen_code(env);
         let ptr_rhr = self.right.gen_code(env);
         let builder = &env.builder;
@@ -153,38 +154,49 @@ impl BinOp {
         let load_rhs = builder.build_load(ptr_rhr, &tmp_id).into_int_value();
 
         let tmp_id = env.get_tmp_var_id();
-        let tmp = match self.op {
-            Op::Or => builder.build_or(load_lhs, load_rhs, &tmp_id),
-            Op::And => builder.build_and(load_lhs, load_rhs, &tmp_id),
-            // TODO: intしかcompare出来ない
-            Op::Eq => {
-                builder.build_int_compare(inkwell::IntPredicate::EQ, load_lhs, load_rhs, &tmp_id)
-            }
-            // TODO: intしかcompare出来ない
-            Op::Neq => {
-                builder.build_int_compare(inkwell::IntPredicate::NE, load_lhs, load_rhs, &tmp_id)
-            }
-            Op::Geq => {
-                builder.build_int_compare(inkwell::IntPredicate::SGE, load_lhs, load_rhs, &tmp_id)
-            }
-            Op::Leq => {
-                builder.build_int_compare(inkwell::IntPredicate::SLE, load_lhs, load_rhs, &tmp_id)
-            }
-            Op::Gt => {
-                builder.build_int_compare(inkwell::IntPredicate::SGT, load_lhs, load_rhs, &tmp_id)
-            }
-            Op::Lt => {
-                builder.build_int_compare(inkwell::IntPredicate::SLT, load_lhs, load_rhs, &tmp_id)
-            }
-            Op::Add => builder.build_int_add(load_lhs, load_rhs, &tmp_id),
-            Op::Sub => builder.build_int_sub(load_lhs, load_rhs, &tmp_id),
-            Op::Mul => builder.build_int_mul(load_lhs, load_rhs, &tmp_id),
-            Op::Div => builder.build_int_signed_div(load_lhs, load_rhs, &tmp_id),
-            Op::Mod => builder.build_int_signed_rem(load_lhs, load_rhs, &tmp_id),
+
+        let (tmp, result_type) = match self.op {
+            Op::Or => (builder.build_or(load_lhs, load_rhs, &tmp_id), bool_type),
+            Op::And => (builder.build_and(load_lhs, load_rhs, &tmp_id), bool_type),
+            Op::Eq => (
+                builder.build_int_compare(inkwell::IntPredicate::EQ, load_lhs, load_rhs, &tmp_id),
+                bool_type,
+            ),
+            Op::Neq => (
+                builder.build_int_compare(inkwell::IntPredicate::NE, load_lhs, load_rhs, &tmp_id),
+                bool_type,
+            ),
+            Op::Geq => (
+                builder.build_int_compare(inkwell::IntPredicate::SGE, load_lhs, load_rhs, &tmp_id),
+                bool_type,
+            ),
+            Op::Leq => (
+                builder.build_int_compare(inkwell::IntPredicate::SLE, load_lhs, load_rhs, &tmp_id),
+                bool_type,
+            ),
+            Op::Gt => (
+                builder.build_int_compare(inkwell::IntPredicate::SGT, load_lhs, load_rhs, &tmp_id),
+                bool_type,
+            ),
+            Op::Lt => (
+                builder.build_int_compare(inkwell::IntPredicate::SLT, load_lhs, load_rhs, &tmp_id),
+                bool_type,
+            ),
+            Op::Add => (builder.build_int_add(load_lhs, load_rhs, &tmp_id), i32_type),
+            Op::Sub => (builder.build_int_sub(load_lhs, load_rhs, &tmp_id), i32_type),
+            Op::Mul => (builder.build_int_mul(load_lhs, load_rhs, &tmp_id), i32_type),
+            Op::Div => (
+                builder.build_int_signed_div(load_lhs, load_rhs, &tmp_id),
+                i32_type,
+            ),
+            Op::Mod => (
+                builder.build_int_signed_rem(load_lhs, load_rhs, &tmp_id),
+                i32_type,
+            ),
         };
 
         let tmp_id = env.get_tmp_var_id();
-        let ptr = builder.build_alloca(i32_type, &tmp_id);
+        let ptr = builder.build_alloca(result_type, &tmp_id);
         builder.build_store(ptr, tmp);
         ptr
     }
@@ -300,15 +312,14 @@ impl IfElse {
         // generate cond, success, failure block
         let ptr = self.cond.gen_code(env);
         let var_id = env.get_tmp_var_id();
-        let cond = env.builder.build_load(ptr, &var_id).into_int_value();
+        let res = env.builder.build_load(ptr, &var_id).into_int_value();
 
         // cond != 0
-        let i32_type = env.ctx.i32_type();
-        let zero = i32_type.const_int(0, false);
+        let zero = res.get_type().const_int(0, false);
         let var_id = env.get_tmp_var_id();
-        let res = env
+        let cond = env
             .builder
-            .build_int_compare(inkwell::IntPredicate::NE, cond, zero, &var_id);
+            .build_int_compare(inkwell::IntPredicate::NE, res, zero, &var_id);
 
         // make success, failure, dest label
         let success_label = env.get_tmp_label_id();
@@ -320,7 +331,7 @@ impl IfElse {
         let dest_block = env.ctx.append_basic_block(fn_value, &label_id);
 
         env.builder
-            .build_conditional_branch(res, success_block, failure_block);
+            .build_conditional_branch(cond, success_block, failure_block);
 
         env.builder.position_at_end(success_block);
         // then_block is always exists
@@ -353,22 +364,92 @@ impl Stmt {
                 let tmp = env.builder.build_load(ptr, &tmp_id);
                 env.builder.build_return(Some(&tmp));
             }
-            Stmt::Assing(assign) => {
-                let ptr_right = assign.right.gen_code(env);
-                let tmp_id = env.get_tmp_var_id();
-                if let Some(ptr_left) = env.get_variable(assign.left.clone()) {
-                    env.builder.build_store(
-                        ptr_left.clone(),
-                        env.builder.build_load(ptr_right, &tmp_id).into_int_value(),
-                    );
-                } else {
-                    panic!("variable {} is not found.", assign.left)
-                }
+            Stmt::Assign(assign) => {
+                assign.gen_code(env);
             }
             Stmt::IfElse(if_else) => {
                 if_else.gen_code(env);
             }
+            Stmt::For(for_) => {
+                for_.gen_code(env);
+            }
         };
+    }
+}
+
+impl Assign {
+    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
+        let ptr_right = self.right.gen_code(env);
+        let tmp_id = env.get_tmp_var_id();
+        if let Some(ptr_left) = env.get_variable(self.left.clone()) {
+            env.builder.build_store(
+                ptr_left.clone(),
+                env.builder.build_load(ptr_right, &tmp_id).into_int_value(),
+            );
+        } else {
+            panic!("variable {} is not found.", self.left)
+        }
+    }
+}
+
+impl For {
+    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
+        //   <decl>
+        //   jmp cond
+        // cond:
+        //   <cond>
+        //   jmp <do> or <dest>
+        // do:
+        //   <stmts>
+        //   jmp update
+        // update:
+        //   <update>
+        //   jmp <cond>
+        // dest:
+        let cond_label = env.get_tmp_label_id();
+        let fn_value = env.function_value.clone().unwrap();
+        let cond_block = env.ctx.append_basic_block(fn_value, &cond_label);
+
+        let do_label = env.get_tmp_label_id();
+        let do_block = env.ctx.append_basic_block(fn_value, &do_label);
+        let update_id = env.get_tmp_label_id();
+        let update_block = env.ctx.append_basic_block(fn_value, &update_id);
+        let dest_id = env.get_tmp_label_id();
+        let dest_block = env.ctx.append_basic_block(fn_value, &dest_id);
+
+        self.var_decl.gen_code(env);
+        env.builder.build_unconditional_branch(cond_block);
+
+        // generate cond
+        env.builder.position_at_end(cond_block);
+        let ptr = self.cond.gen_code(env);
+        let var_id = env.get_tmp_var_id();
+        let res = env.builder.build_load(ptr, &var_id).into_int_value();
+        // cond != 0
+        let zero = res.get_type().const_int(0, false);
+        let var_id = env.get_tmp_var_id();
+        let cond = env
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, res, zero, &var_id);
+
+        // jmp do: if cond else dest:
+        env.builder
+            .build_conditional_branch(cond, do_block, dest_block);
+
+        // generate do
+        env.builder.position_at_end(do_block);
+        self.stmts.gen_code(env);
+
+        // jmp update:
+        env.builder.build_unconditional_branch(update_block);
+
+        // generate update
+        env.builder.position_at_end(update_block);
+        self.assign.gen_code(env);
+        env.builder.build_unconditional_branch(cond_block);
+
+        // jmp dest:
+        env.builder.position_at_end(dest_block);
     }
 }
 

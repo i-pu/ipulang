@@ -7,11 +7,13 @@
     | <assign>
     | <return>
     | <if_else>
+    | <for>
 
 <return> := 'return' <or-expr> ';'
 <assign> := <variable_val> '=' <or-expr> ';'
 <var_decl>   := 'var' ID (= <or-expr>)? ';'
 <if_else> := if '(' <or-expr> ')' '{' <stmts> '}' [ else '{' <stmts> '}' ]
+<for> := 'for' '(' <var_decl> <or-expr> ';' <assign> ')' '{' <stmts> '}'
 
 https://cs.wmich.edu/~gupta/teaching/cs4850/sumII06/The%20syntax%20of%20C%20in%20Backus-Naur%20form.htm
 <or-expr>             := <and-expr> | <or-expr> '||' <and-expr>
@@ -31,7 +33,5 @@ https://cs.wmich.edu/~gupta/teaching/cs4850/sumII06/The%20syntax%20of%20C%20in%2
 <const_bool_val> := 'true' | 'false'
 <call> = ID '(' <expr>* ')'
 <variable_val> := ID
-
-3 + 4 > 7
 
 ID := [a-zA-Z][a-zA-Z0-9]* 

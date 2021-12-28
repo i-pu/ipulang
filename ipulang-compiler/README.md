@@ -28,9 +28,9 @@
           - [x] 引数のallocaをまだやっていない
 - [x] declare
     - [x] putchar
-- [ ] 構文追加
-    - [ ] if
-    - [ ] for
+- [x] 構文追加
+    - [x] if
+    - [x] for
 - [ ] include
 
 ### Day2
@@ -53,6 +53,7 @@
     - [x] 変数を宣言, 使用できる
     - [x] main関数を宣言できる
 - [x] LLVM IRコード生成
+- [x] fizzbuzz
 
 ### LLVM fix
 ```shell

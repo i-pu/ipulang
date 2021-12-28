@@ -118,12 +118,32 @@ impl IfElse {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct For {
+    pub var_decl: VariableDecl,
+    pub cond: Expr,
+    pub assign: Assign,
+    pub stmts: Stmts,
+}
+
+impl For {
+    pub fn new(var_decl: VariableDecl, cond: Expr, assign: Assign, stmts: Stmts) -> Self {
+        Self {
+            var_decl,
+            cond,
+            assign,
+            stmts,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
     Expr(Expr),
     Return(Expr),
     VariableDecl(VariableDecl),
-    Assing(Assing),
+    Assign(Assign),
     IfElse(IfElse),
+    For(For),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,12 +156,12 @@ impl Program {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Assing {
+pub struct Assign {
     pub left: String,
     pub right: Expr,
 }
 
-impl Assing {
+impl Assign {
     pub fn new(left: String, right: Expr) -> Self {
         Self { left, right }
     }

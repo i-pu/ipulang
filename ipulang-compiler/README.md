@@ -15,7 +15,7 @@
     - [x] node
     - [x] codegen
     - [x] 変数初期化
-    - [ ] assing
+    - [x] assign
 - [x] 関数宣言
     - [x] parser
     - [x] node
@@ -23,15 +23,14 @@
     - [x] main関数宣言
     - [x] main以外の関数宣言
     - [x] return文
-- [ ] 構文追加
-    - [x] return
     - [x] 関数呼び出し
         - [x] 引数付きで呼び出す
-          - [ ] 引数のallocaをまだやっていない
+          - [x] 引数のallocaをまだやっていない
+- [x] declare
+    - [x] putchar
+- [ ] 構文追加
     - [ ] if
     - [ ] for
-- [ ] ビルトイン関数
-    - [ ] print
 - [ ] include
 
 ### Day2
@@ -39,6 +38,9 @@
 - [ ] syntax highlight
 - [ ] web assembly
 - [ ] 型を導入する
+    - [ ] 文字列型の導入
+    - [ ] ポインタ型の導入
+    - [ ] 配列型の導入
 - [ ] (error tracing)
 
 ## マイルストーン

@@ -1,0 +1,40 @@
+{
+  "name": "ipulang-extension",
+  "private": true,
+  "version": "1.0.0",
+  "description": "ipulang vscode extension",
+  "engines": {
+    "vscode": "^1.52.1"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:ipulang"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ipulang",
+        "extensions": [
+          ".ipu"
+        ]
+      }
+		],
+	"commands": [
+			{
+				"command": "ipulang-extension.restartServer",
+				"title": "ipulang-extension: restart ipulang-lsp"
+			}
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^7.0.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "ipulang"
+  ],
+  "author": "",
+  "license": "MIT"
+}

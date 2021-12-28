@@ -71,13 +71,13 @@ impl Stmts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDecl {
     pub id: String,
-    pub argc: usize,
+    pub args: Vec<String>,
     pub stmts: Stmts,
 }
 
 impl FunctionDecl {
-    pub fn new(id: String, argc: usize, stmts: Stmts) -> Self {
-        Self { id, argc, stmts }
+    pub fn new(id: String, args: Vec<String>, stmts: Stmts) -> Self {
+        Self { id, args, stmts }
     }
 }
 

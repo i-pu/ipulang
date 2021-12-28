@@ -6,7 +6,11 @@
 f:                                      # @f
 	.cfi_startproc
 # %bb.0:                                # %entry
-	xorl	%eax, %eax
+	movl	%edi, %eax
+	movl	%edi, -4(%rsp)
+	movl	$1, -8(%rsp)
+	incl	%eax
+	movl	%eax, -12(%rsp)
 	retq
 .Lfunc_end0:
 	.size	f, .Lfunc_end0-f
@@ -20,9 +24,10 @@ main:                                   # @main
 # %bb.0:                                # %entry
 	pushq	%rax
 	.cfi_def_cfa_offset 16
+	movl	$1, 4(%rsp)
+	movl	$1, %edi
 	callq	f@PLT
-	movl	%eax, 4(%rsp)
-	xorl	%eax, %eax
+	movl	%eax, (%rsp)
 	popq	%rcx
 	.cfi_def_cfa_offset 8
 	retq

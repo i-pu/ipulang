@@ -193,7 +193,7 @@ pub fn function_decl_parser(s: &str) -> IResult<&str, FunctionDecl> {
             tuple((multispace0, char('}'))),
         ),
     ))(s)?;
-    Ok((s, FunctionDecl::new(name.to_owned(), params.len(), stmts)))
+    Ok((s, FunctionDecl::new(name.to_owned(), params, stmts)))
 }
 
 pub fn program_parser(s: &str) -> Program {
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn test_fn1() {
         let code = "fn main( ) { }";
-        let expect = FunctionDecl::new("main".to_owned(), 0, Stmts::new(vec![]));
+        let expect = FunctionDecl::new("main".to_owned(), vec![], Stmts::new(vec![]));
         let result = function_decl_parser(code);
         assert_eq!(result, Ok(("", expect)));
     }
@@ -406,7 +406,7 @@ mod tests {
         let code = "fn  h0Ge() { 1 ; }";
         let expect = FunctionDecl::new(
             "h0Ge".to_owned(),
-            0,
+            vec![],
             Stmts::new(vec![Stmt::Expr(Expr::Const(Const::new(1)))]),
         );
         let result = function_decl_parser(code);
@@ -443,10 +443,10 @@ mod tests {
         let codes: Vec<&str> = vec!["fn a() { } fn main() {a();}"];
 
         let expect = Program::new(vec![
-            FunctionDecl::new("a".to_owned(), 0, Stmts::new(vec![])),
+            FunctionDecl::new("a".to_owned(), vec![], Stmts::new(vec![])),
             FunctionDecl::new(
                 "main".to_owned(),
-                0,
+                vec![],
                 Stmts::new(vec![Stmt::Expr(Expr::Call(Call::new(
                     "a".to_string(),
                     vec![],

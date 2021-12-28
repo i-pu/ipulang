@@ -1,6 +1,5 @@
 fn f(a , b) {
-    TODO: 引数をallocaする
-    return 0;
+    return a + b;
 }
 
 fn main() {

@@ -1,7 +1,7 @@
 ; ModuleID = 'main'
 source_filename = "main"
 
-define i32 @a(i32 %0) {
+define i32 @a() {
 entry:
   %"1" = alloca i32, align 4
   store i32 0, i32* %"1", align 4
@@ -10,7 +10,7 @@ entry:
   ret i32 0
 }
 
-define i32 @main(i32 %0) {
+define i32 @main() {
 entry:
   %"3" = alloca i32, align 4
   store i32 6, i32* %"3", align 4

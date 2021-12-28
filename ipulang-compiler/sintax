@@ -1,0 +1,26 @@
+<program> := [ <function_decl> ]
+<function_decl> := 'fn (' [<variable_val>,] ') {' <stmts> '}'
+<stmts> := <stmt> [ <stmts> ]
+<stmt> :
+    = <expr> ';'
+    | <var_decl>
+    | <assign>
+    | <return>
+
+<return> := 'return' <expr> ';'
+<assign> := <variable_val> = <expr> ';'
+<var_decl>   := 'var' ID (= <expr>)? ';'
+<expr>       := <term> [ ('+'|'-') <expr> ]
+<term>       := <factor> [ ('*'|'/') <term> ]
+
+<factor> :
+    = <variable_val> 
+    | <const_val> 
+    | <paren_expr> 
+    | <call>
+<paren_expr> := '(' <expr> ')'
+<const_val> := 0 | [1-9][0-9]*
+<call> = ID '(' <expr>* ')'
+<variable_val> := ID
+
+ID := [a-zA-Z][a-zA-Z0-9]* 

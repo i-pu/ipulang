@@ -7,6 +7,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::JitFunction;
 use inkwell::module::Module;
+use inkwell::values::BasicMetadataValueEnum;
 use inkwell::values::CallSiteValue;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
@@ -19,6 +20,7 @@ pub fn compile(code: String) -> Result<String, Box<Error>> {
     let ast = program_parser(&code);
     let context = Context::create();
     let mut env = Env::new(&context);
+
     ast.gen_code(&mut env);
     Ok(env.module.print_to_string().to_string())
 }
@@ -47,12 +49,21 @@ impl<'ctx> Env<'ctx> {
     fn new(ctx: &'ctx Context) -> Self {
         // module
         let module = ctx.create_module("main");
+
+        let mut functions = HashSet::new();
+
+        // decrare builtin function
+        let i32_type = ctx.i32_type();
+        let putchar_type = i32_type.fn_type(&[i32_type.into()], false);
+        functions.insert("putchar".to_owned());
+        module.add_function("putchar", putchar_type, None);
+
         Self {
             ctx: ctx,
             module: module,
             variables: HashMap::new(),
             var_count: 0,
-            functions: HashSet::new(),
+            functions: functions,
             builder: ctx.create_builder(),
             function: "".to_owned(),
         }
@@ -79,11 +90,35 @@ impl<'ctx> Env<'ctx> {
         let mut map = self.variables.get_mut(&self.function).unwrap();
         map.insert(name, value);
     }
+
+    /// PointerValueをIntValueに変換する
+    /// IntValueの名前は任意
+    fn point_to_int(&mut self, ptr: PointerValue<'ctx>, int_id: Option<String>) -> IntValue {
+        self.var_count += 1;
+        let tmp = self.builder.build_load(ptr, &self.var_count.to_string());
+        tmp.into_int_value()
+    }
+    /// IntValueをPointerValueに変換する
+    /// IntValueの名前は任意
+    fn int_to_point(&mut self, int: IntValue, ptr_id: Option<&str>) -> PointerValue<'ctx> {
+        let i32_type = self.ctx.i32_type();
+        if let Some(ptr_id) = ptr_id {
+            let ptr: PointerValue = self.builder.build_alloca(i32_type, ptr_id);
+            self.builder.build_store(ptr, int);
+            ptr
+        } else {
+            self.var_count += 1;
+            let ptr: PointerValue = self
+                .builder
+                .build_alloca(i32_type, &self.var_count.to_string());
+            self.builder.build_store(ptr, int);
+            ptr
+        }
+    }
 }
 
 impl Const {
     fn gen_code<'ctx>(self, env: &Env<'ctx>) -> IntValue<'ctx> {
-        dbg!("code_gen: Const");
         let i32_type = env.ctx.i32_type();
         i32_type.const_int(self.0 as u64, false)
     }
@@ -180,10 +215,15 @@ impl FunctionDecl {
         // FIXME: mainのみしか対応していない
         let i32_type = env.ctx.i32_type();
         // let main_fn_type = i32_type.fn_type(&[i32_type.into()], false);
-        let fn_type = i32_type.fn_type(&vec![i32_type.into(); self.argc], false);
+        let fn_type = i32_type.fn_type(&vec![i32_type.into(); self.args.len()], false);
         let fn_value = env.module.add_function(&self.id, fn_type, None);
 
-        env.functions.insert(self.id.clone());
+        if !env.functions.insert(self.id.clone()) {
+            panic!("function {} is already decleared", &self.id);
+        }
+        // 変数マップを作る
+        env.variables.entry(self.id.clone()).or_default();
+        env.function = self.id.clone();
 
         // block
         let basic_block = env.ctx.append_basic_block(fn_value, "entry");
@@ -191,13 +231,16 @@ impl FunctionDecl {
 
         // 引数を使う時
         // let param0 = main_fn.get_nth_param(0).unwrap().into_int_value();
-
-        // 変数マップを作る
-        env.variables.entry(self.id.clone()).or_default();
-        env.function = self.id.clone();
+        for (i, arg) in self.args.iter().enumerate() {
+            let param = fn_value.get_nth_param(i as u32).unwrap().into_int_value();
+            // 引数名に対応するptrを作成
+            let ptr_param = env.int_to_point(param, Some(arg));
+            env.set_variable(arg.clone(), ptr_param);
+        }
 
         self.stmts.gen_code(env);
 
+        // returnがないときも0をかえすようにしている
         let zero = i32_type.const_int(0, false);
         env.builder.build_return(Some(&zero));
     }
@@ -205,18 +248,26 @@ impl FunctionDecl {
 
 impl Call {
     fn gen_code<'a>(self, env: &mut Env<'a>) -> CallSiteValue<'a> {
-        let id = env.functions.get(&self.id).unwrap().clone();
+        // eval exprs
+        let mut evaluated_args: Vec<BasicMetadataValueEnum> = vec![];
+        for arg in self.args {
+            let evaluated_ptr = arg.gen_code(env);
+            env.var_count += 1;
+            let evaluated = env
+                .builder
+                .build_load(evaluated_ptr, &env.var_count.to_string());
+            evaluated_args.push(evaluated.into());
+        }
+
         let function = env.module.get_function(&self.id).unwrap();
-        // TODO: support args
         env.var_count += 1;
         env.builder
-            .build_call(function, &[], &env.var_count.to_string())
+            .build_call(function, &evaluated_args, &env.var_count.to_string())
     }
 }
 
 impl Stmt {
     fn gen_code<'a>(self, env: &mut Env<'a>) {
-        dbg!(&self);
         match self {
             Stmt::Expr(expr) => {
                 expr.gen_code(env);

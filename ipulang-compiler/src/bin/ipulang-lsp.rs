@@ -72,7 +72,14 @@ async fn main() {
     let stdout = tokio::io::stdout();
 
     let (service, messages) = LspService::new(|client| Backend { client });
-    Server::new(stdin, stdout)
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:12345")
+        .await
+        .unwrap();
+    let (stream, _) = listener.accept().await.unwrap();
+    let (read, write) = tokio::io::split(stream);
+    // Server::new(stdin, stdout)
+    Server::new(read, write)
         .interleave(messages)
         .serve(service)
         .await;

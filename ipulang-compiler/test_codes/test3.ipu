@@ -1,4 +1,4 @@
-fn main(  ) {
-    var a;
+fn main(  ): i32 {
+    var a: i32;
     return 2 + a;
 }

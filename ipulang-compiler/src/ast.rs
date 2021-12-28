@@ -15,12 +15,33 @@ use crate::nodes::{
     Variable, VariableDecl,
 };
 
+use crate::types::Type;
+
+pub fn type_parser(s: &str) -> IResult<&str, Type> {
+    alt((
+        map(tag("i32"), |_| Type::Int32),
+        map(tag("i64"), |_| Type::Int64),
+        map(tag("bool"), |_| Type::Bool),
+        map(tag("string"), |_| Type::String),
+        map(tag("unit"), |_| Type::Unit),
+    ))(s)
+}
+
 /// "64hoge" -> hoge, <64>
-pub fn const_parser(s: &str) -> IResult<&str, Expr> {
-    // dbg!("const_parser");
-    let (ss, lit) = digit1(s)?;
-    let val = FromStr::from_str(lit).unwrap();
-    Ok((ss, Expr::Const(Const::new(val))))
+pub fn const_parser(s: &str) -> IResult<&str, Const> {
+    alt((
+        map(
+            tuple((digit1, char('_'), type_parser)),
+            |(n, _, t)| match t {
+                Type::Int32 => Const::I32Const(n.parse::<i32>().unwrap()),
+                Type::Int64 => Const::I64Const(n.parse::<i64>().unwrap()),
+                Type::Bool => Const::BoolConst(n.parse::<i32>().unwrap() != 0),
+                _ => panic!("unsupported type"),
+            },
+        ),
+        // リテラルを書かない時はi32
+        map(digit1, |s: &str| Const::I32Const(s.parse::<i32>().unwrap())),
+    ))(s)
 }
 
 // 変数名
@@ -32,15 +53,21 @@ pub fn var_name_parser(s: &str) -> IResult<&str, String> {
 // 変数
 pub fn var_parser(s: &str) -> IResult<&str, Variable> {
     let (s, name) = var_name_parser(s)?;
-    Ok((s, Variable::new(name.to_owned())))
+    Ok((s, Variable::new(name.to_owned(), Type::Unknown)))
 }
 
 // 変数宣言
 pub fn var_decl_parser(s: &str) -> IResult<&str, VariableDecl> {
-    let (s, (_, _, name, opt_init, _)) = tuple((
+    let (s, (_, _, name, _, _, _, typ, _, opt_init, _)) = tuple((
         tag("var"),
         multispace1,
         var_name_parser,
+        // type annotation
+        multispace0,
+        char(':'),
+        multispace0,
+        type_parser,
+        multispace0,
         map(
             opt(tuple((
                 delimited(multispace0, char('='), multispace0),
@@ -50,7 +77,7 @@ pub fn var_decl_parser(s: &str) -> IResult<&str, VariableDecl> {
         ),
         char(';'),
     ))(s)?;
-    Ok((s, VariableDecl::new(name.to_owned(), opt_init)))
+    Ok((s, VariableDecl::new(name.to_owned(), typ, opt_init)))
 }
 
 pub fn paren_expr_parser(s: &str) -> IResult<&str, Expr> {
@@ -78,7 +105,7 @@ pub fn factor_parser(s: &str) -> IResult<&str, Expr> {
     delimited(
         multispace0,
         alt((
-            const_parser,
+            map(const_parser, |c| Expr::Const(c)),
             paren_expr_parser,
             map(call_parser, |call| Expr::Call(call)),
             map(var_parser, |var| Expr::Variable(var)),
@@ -106,7 +133,7 @@ pub fn multiplicative_expr_parser(s: &str) -> IResult<&str, Expr> {
         )),
         |(factor, option)| {
             if let Some((op, expr)) = option {
-                Expr::BinOp(Box::new(BinOp::new(factor, op, expr)))
+                Expr::BinOp(Box::new(BinOp::new(factor, op, expr, Type::Unknown)))
             } else {
                 factor
             }
@@ -132,7 +159,7 @@ pub fn additive_expr_parser(s: &str) -> IResult<&str, Expr> {
         )),
         |(multi, option)| {
             if let Some((op, expr)) = option {
-                Expr::BinOp(Box::new(BinOp::new(multi, op, expr)))
+                Expr::BinOp(Box::new(BinOp::new(multi, op, expr, Type::Unknown)))
             } else {
                 multi
             }
@@ -164,7 +191,7 @@ pub fn releational_expr_parser(s: &str) -> IResult<&str, Expr> {
         )),
         |(add, option)| {
             if let Some((op, expr)) = option {
-                Expr::BinOp(Box::new(BinOp::new(add, op, expr)))
+                Expr::BinOp(Box::new(BinOp::new(add, op, expr, Type::Unknown)))
             } else {
                 add
             }
@@ -189,7 +216,7 @@ pub fn equality_expr_parser(s: &str) -> IResult<&str, Expr> {
         )),
         |(rel, option)| {
             if let Some((op, expr)) = option {
-                Expr::BinOp(Box::new(BinOp::new(rel, op, expr)))
+                Expr::BinOp(Box::new(BinOp::new(rel, op, expr, Type::Unknown)))
             } else {
                 rel
             }
@@ -208,7 +235,7 @@ pub fn and_expr_parser(s: &str) -> IResult<&str, Expr> {
         )),
         |(rel, option)| {
             if let Some((_, expr)) = option {
-                Expr::BinOp(Box::new(BinOp::new(rel, Op::And, expr)))
+                Expr::BinOp(Box::new(BinOp::new(rel, Op::And, expr, Type::Unknown)))
             } else {
                 rel
             }
@@ -227,7 +254,7 @@ pub fn or_expr_parser(s: &str) -> IResult<&str, Expr> {
         )),
         |(rel, option)| {
             if let Some((_, expr)) = option {
-                Expr::BinOp(Box::new(BinOp::new(rel, Op::Or, expr)))
+                Expr::BinOp(Box::new(BinOp::new(rel, Op::Or, expr, Type::Unknown)))
             } else {
                 rel
             }
@@ -330,25 +357,40 @@ pub fn stmts_parser(s: &str) -> IResult<&str, Stmts> {
 //     delimited(multispace0, tag(keyword), multispace0)(s)
 // }
 
+pub fn function_parameters_parser(s: &str) -> IResult<&str, Vec<Variable>> {
+    delimited(
+        char('('),
+        delimited(
+            multispace0,
+            many0(map(tuple((var_name_parser, type_parser)), |(id, typ)| {
+                Variable::new(id, typ)
+            })),
+            multispace0,
+        ),
+        char(')'),
+    )(s)
+}
+
 // 関数宣言
 // TODO: みづらい
 pub fn function_decl_parser(s: &str) -> IResult<&str, FunctionDecl> {
-    let (s, (name, params, stmts)) = tuple((
-        preceded(tuple((tag("fn"), multispace1)), var_name_parser),
-        preceded(
-            tuple((char('('), multispace0)),
-            separated_list0(
-                delimited(multispace0, char(','), multispace0),
-                var_name_parser,
-            ),
-        ),
+    let (s, (_, _, name, params, _, _, _, typ, _, stmts)) = tuple((
+        tag("fn"),
+        multispace1,
+        var_name_parser,
+        function_parameters_parser,
+        multispace0,
+        char(':'),
+        multispace0,
+        type_parser,
+        multispace0,
         delimited(
-            tuple((multispace0, char(')'), multispace0, char('{'), multispace0)),
-            stmts_parser,
-            tuple((multispace0, char('}'))),
+            multispace0,
+            delimited(char('{'), stmts_parser, char('}')),
+            multispace0,
         ),
     ))(s)?;
-    Ok((s, FunctionDecl::new(name.to_owned(), params, stmts)))
+    Ok((s, FunctionDecl::new(name.to_owned(), params, typ, stmts)))
 }
 
 pub fn program_parser(s: &str) -> Program {
@@ -363,18 +405,21 @@ mod tests {
 
     #[test]
     fn test_const() {
-        let code = "4";
-        let result = or_expr_parser(code);
-        assert_eq!(result, Ok(("", Expr::Const(Const::new(4)))));
+        let codes: Vec<&str> = vec!["4", "20", "0_i32", "10_i64", "0_bool", "1_bool"];
+        for code in codes {
+            let (res, _) = const_parser(code).unwrap();
+            assert_eq!(res, "", "\n=== code: {} ===\n", code);
+        }
     }
 
     #[test]
     fn test_binop_add() {
         let codes: Vec<&str> = vec!["1+2", "1   +2", "1 + 2"];
         let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
-            Expr::Const(Const::new(1)),
+            Expr::Const(Const::new_i32(1)),
             Op::Add,
-            Expr::Const(Const::new(2)),
+            Expr::Const(Const::new_i32(2)),
+            Type::Unknown,
         )));
 
         for code in codes {
@@ -393,15 +438,17 @@ mod tests {
     fn test_binop2() {
         let codes: Vec<&str> = vec!["1 + 2 + 3"];
         let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
-            Expr::Const(Const::new(1)), // 1
-            Op::Add,                    // +
+            Expr::Const(Const::new_i32(1)), // 1
+            Op::Add,                        // +
             Expr::BinOp(Box::new(
                 BinOp::new(
-                    Expr::Const(Const::new(2)),
+                    Expr::Const(Const::new_i32(2)),
                     Op::Add,
-                    Expr::Const(Const::new(3)),
+                    Expr::Const(Const::new_i32(3)),
+                    Type::Unknown,
                 ), // 2 + 3
             )),
+            Type::Unknown,
         )));
 
         for code in codes {
@@ -421,13 +468,15 @@ mod tests {
         let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
             Expr::BinOp(Box::new(
                 BinOp::new(
-                    Expr::Const(Const::new(1)),
+                    Expr::Const(Const::new_i32(1)),
                     Op::Mul,
-                    Expr::Const(Const::new(2)),
+                    Expr::Const(Const::new_i32(2)),
+                    Type::Unknown,
                 ), // 1 * 2
             )),
-            Op::Add,                    // +
-            Expr::Const(Const::new(3)), // 3
+            Op::Add,                        // +
+            Expr::Const(Const::new_i32(3)), // 3
+            Type::Unknown,
         )));
 
         for code in codes {
@@ -448,13 +497,15 @@ mod tests {
         let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
             Expr::BinOp(Box::new(
                 BinOp::new(
-                    Expr::Const(Const::new(1)),
+                    Expr::Const(Const::new_i32(1)),
                     Op::Geq,
-                    Expr::Const(Const::new(2)),
+                    Expr::Const(Const::new_i32(2)),
+                    Type::Unknown,
                 ), // 1 >= 2
             )),
-            Op::Eq,                     // ==
-            Expr::Const(Const::new(3)), // 3
+            Op::Eq,                         // ==
+            Expr::Const(Const::new_i32(3)), // 3
+            Type::Unknown,
         )));
 
         for code in codes {
@@ -492,8 +543,8 @@ mod tests {
 
     #[test]
     fn test_vardecl1() {
-        let codes: Vec<&str> = vec!["var a;", "var   a;"];
-        let expect_expr: VariableDecl = VariableDecl::new("a".to_owned(), None);
+        let codes: Vec<&str> = vec!["var a: i32;", "var   a : i32;"];
+        let expect_expr: VariableDecl = VariableDecl::new("a".to_owned(), Type::Int32, None);
         for code in codes {
             let result = var_decl_parser(code);
             assert_eq!(result, Ok(("", expect_expr.clone())));
@@ -501,8 +552,9 @@ mod tests {
     }
     #[test]
     fn test_vardecl2() {
-        let codes: Vec<&str> = vec!["var ababaAFAF;", "var   ababaAFAF;"];
-        let expect_expr: VariableDecl = VariableDecl::new("ababaAFAF".to_owned(), None);
+        let codes: Vec<&str> = vec!["var ababaAFAF: i32 ;", "var   ababaAFAF: i32;"];
+        let expect_expr: VariableDecl =
+            VariableDecl::new("ababaAFAF".to_owned(), Type::Int32, None);
         for code in codes {
             let result = var_decl_parser(code);
             assert_eq!(result, Ok(("", expect_expr.clone())));
@@ -512,12 +564,12 @@ mod tests {
     #[test]
     fn test_var() {
         let codes: Vec<&str> = vec!["a", "A", "Ab", "a1", "A123"];
-
         for code in codes {
-            let result = var_parser(code);
-            assert_eq!(result, Ok(("", Variable::new(code.to_string()))));
+            let (rest, _) = var_parser(code).unwrap();
+            assert_eq!(rest, "", "\n=== code: {} ===", code);
         }
     }
+
     #[test]
     fn test_stmt1() {
         let codes: Vec<&str> = vec!["1 * 2 + 3;", "1 * 2 + 3   ;"];
@@ -525,13 +577,15 @@ mod tests {
         let expect_expr: Stmt = Stmt::Expr(Expr::BinOp(Box::new(BinOp::new(
             Expr::BinOp(Box::new(
                 BinOp::new(
-                    Expr::Const(Const::new(1)),
+                    Expr::Const(Const::new_i32(1)),
                     Op::Mul,
-                    Expr::Const(Const::new(2)),
+                    Expr::Const(Const::new_i32(2)),
+                    Type::Unknown,
                 ), // 1 * 2
             )),
-            Op::Add,                    // +
-            Expr::Const(Const::new(3)), // 3
+            Op::Add,                        // +
+            Expr::Const(Const::new_i32(3)), // 3
+            Type::Unknown,
         ))));
 
         for code in codes {
@@ -542,34 +596,42 @@ mod tests {
 
     #[test]
     fn test_stmts1() {
-        let codes: Vec<&str> = vec!["1; 2;", "var a; var b;", "var a; 1 * 2 + 3;", "1 + a;"];
+        let codes: Vec<&str> = vec![
+            "1; 2;",
+            "var a: i32; var b: i32;",
+            "var a: i32; 1 * 2 + 3;",
+            "1 + a;",
+        ];
         let exprs: Vec<Stmts> = vec![
             Stmts::new(vec![
-                Stmt::Expr(Expr::Const(Const::new(1))),
-                Stmt::Expr(Expr::Const(Const::new(2))),
+                Stmt::Expr(Expr::Const(Const::new_i32(1))),
+                Stmt::Expr(Expr::Const(Const::new_i32(2))),
             ]),
             Stmts::new(vec![
-                Stmt::VariableDecl(VariableDecl::new("a".to_owned(), None)), // var a;
-                Stmt::VariableDecl(VariableDecl::new("b".to_owned(), None)), // var b;
+                Stmt::VariableDecl(VariableDecl::new("a".to_owned(), Type::Int32, None)), // var a;
+                Stmt::VariableDecl(VariableDecl::new("b".to_owned(), Type::Int32, None)), // var b;
             ]),
             Stmts::new(vec![
-                Stmt::VariableDecl(VariableDecl::new("a".to_owned(), None)), // var a;
+                Stmt::VariableDecl(VariableDecl::new("a".to_owned(), Type::Int32, None)), // var a;
                 Stmt::Expr(Expr::BinOp(Box::new(BinOp::new(
                     Expr::BinOp(Box::new(
                         BinOp::new(
-                            Expr::Const(Const::new(1)),
+                            Expr::Const(Const::new_i32(1)),
                             Op::Mul,
-                            Expr::Const(Const::new(2)),
+                            Expr::Const(Const::new_i32(2)),
+                            Type::Unknown,
                         ), // 1 * 2
                     )),
-                    Op::Add,                    // +
-                    Expr::Const(Const::new(3)), // 3
+                    Op::Add,                        // +
+                    Expr::Const(Const::new_i32(3)), // 3
+                    Type::Unknown,
                 )))),
             ]),
             Stmts::new(vec![Stmt::Expr(Expr::BinOp(Box::new(BinOp::new(
-                Expr::Const(Const::new(1)),
+                Expr::Const(Const::new_i32(1)),
                 Op::Add,
-                Expr::Variable(Variable::new("a".to_owned())),
+                Expr::Variable(Variable::new("a".to_owned(), Type::Unknown)),
+                Type::Unknown,
             ))))]),
         ];
 
@@ -583,9 +645,9 @@ mod tests {
     fn test_stmt() {
         let codes: Vec<&str> = vec![
             "1;",
-            "var a;",
-            "var a = 1;",
-            "var a = 1 + 2;",
+            "var a: i32;",
+            "var a: i32 = 1;",
+            "var a: i32 = 1 + 2;",
             "a;",
             "f();",
             "f( ) + 1;",
@@ -598,19 +660,20 @@ mod tests {
 
     #[test]
     fn test_fn1() {
-        let code = "fn main( ) { }";
-        let expect = FunctionDecl::new("main".to_owned(), vec![], Stmts::new(vec![]));
+        let code = "fn main( ): unit { }";
+        let expect = FunctionDecl::new("main".to_owned(), vec![], Type::Unit, Stmts::new(vec![]));
         let result = function_decl_parser(code);
         assert_eq!(result, Ok(("", expect)));
     }
 
     #[test]
     fn test_fn2() {
-        let code = "fn  h0Ge() { 1 ; }";
+        let code = "fn  h0Ge() : unit { 1 ; }";
         let expect = FunctionDecl::new(
             "h0Ge".to_owned(),
             vec![],
-            Stmts::new(vec![Stmt::Expr(Expr::Const(Const::new(1)))]),
+            Type::Unit,
+            Stmts::new(vec![Stmt::Expr(Expr::Const(Const::new_i32(1)))]),
         );
         let result = function_decl_parser(code);
         assert_eq!(result, Ok(("", expect)));
@@ -633,7 +696,12 @@ mod tests {
 
     #[test]
     fn test_fn_decl() {
-        let codes: Vec<&str> = vec!["fn a() { }", "fn a() { 1; }", "fn a(){}", "fn a( ) { }"];
+        let codes: Vec<&str> = vec![
+            "fn a() : unit { }",
+            "fn a() : unit { 1; }",
+            "fn a():unit {}",
+            "fn a( ) : unit { }",
+        ];
 
         for code in codes {
             let (rest, _) = function_decl_parser(code).unwrap();
@@ -643,13 +711,14 @@ mod tests {
 
     #[test]
     fn test_fns() {
-        let codes: Vec<&str> = vec!["fn a() { } fn main() {a();}"];
+        let codes: Vec<&str> = vec!["fn a() : unit { } fn main(): i32 {a();}"];
 
         let expect = Program::new(vec![
-            FunctionDecl::new("a".to_owned(), vec![], Stmts::new(vec![])),
+            FunctionDecl::new("a".to_owned(), vec![], Type::Unit, Stmts::new(vec![])),
             FunctionDecl::new(
                 "main".to_owned(),
                 vec![],
+                Type::Int32,
                 Stmts::new(vec![Stmt::Expr(Expr::Call(Call::new(
                     "a".to_string(),
                     vec![],
@@ -679,9 +748,9 @@ mod tests {
     #[test]
     fn test_for() {
         let codes: Vec<&str> = vec![
-            "for(var i;i < 10; i = i + 1;){}",
-            "for (var i;i < 10; i = i + 1;){ return 0;}",
-            r#"for (var i; i < 10; i = i + 1;) {
+            "for(var i: i32 ;i < 10; i = i + 1;){}",
+            "for (var i : i32 ;i < 10; i = i + 1;){ return 0;}",
+            r#"for (var i  : i32 ; i < 10; i = i + 1;) {
                 a = a + i;
             }"#,
         ];

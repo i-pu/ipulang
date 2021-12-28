@@ -1,4 +1,4 @@
-fn main(  ) {
-    var a;
+fn main(  ) :unit {
+    var a: i32;
     2 + a;
 }

@@ -1,5 +1,5 @@
 <program> := [ <function_decl> ]
-<function_decl> := 'fn (' [<variable_val>,] ') {' <stmts> '}'
+<function_decl> := 'fn (' [<variable_val> ':' <type>,] ') {' <stmts> '}'
 <stmts> := <stmt> [ <stmts> ]
 <stmt> :
     = <or-expr> ';'
@@ -11,7 +11,7 @@
 
 <return> := 'return' <or-expr> ';'
 <assign> := <variable_val> '=' <or-expr> ';'
-<var_decl>   := 'var' ID (= <or-expr>)? ';'
+<var_decl>   := 'var' ID ':' <type> (= <or-expr>)? ';'
 <if_else> := if '(' <or-expr> ')' '{' <stmts> '}' [ else '{' <stmts> '}' ]
 <for> := 'for' '(' <var_decl> <or-expr> ';' <assign> ')' '{' <stmts> '}'
 
@@ -33,5 +33,6 @@ https://cs.wmich.edu/~gupta/teaching/cs4850/sumII06/The%20syntax%20of%20C%20in%2
 <const_bool_val> := 'true' | 'false'
 <call> = ID '(' <expr>* ')'
 <variable_val> := ID
+<type> := unit | int32 | int64 | uint32 | uint64 | bool | String
 
 ID := [a-zA-Z][a-zA-Z0-9]* 

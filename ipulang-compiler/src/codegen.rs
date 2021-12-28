@@ -9,8 +9,10 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
+use inkwell::types::BasicTypeEnum;
 use inkwell::types::IntType;
 use inkwell::values::BasicMetadataValueEnum;
+use inkwell::values::BasicValueEnum;
 use inkwell::values::CallSiteValue;
 use inkwell::values::FunctionValue;
 use inkwell::values::IntValue;
@@ -18,6 +20,7 @@ use inkwell::values::PointerValue;
 
 use crate::ast::program_parser;
 use crate::nodes::*;
+use crate::types::*;
 
 pub fn compile(code: String) -> Result<String, Box<Error>> {
     let ast = program_parser(&code);
@@ -39,7 +42,7 @@ struct Env<'ctx> {
     var_count: Rc<Cell<usize>>,
     /// 宣言されている関数一覧
     // TODO: 後から宣言できるようにする
-    functions: HashSet<String>,
+    functions: HashMap<String, FunctionValue<'ctx>>,
 
     /// 現在の builder
     builder: Builder<'ctx>,
@@ -55,13 +58,13 @@ impl<'ctx> Env<'ctx> {
         // module
         let module = ctx.create_module("main");
 
-        let mut functions = HashSet::new();
+        let mut functions = HashMap::new();
 
         // decrare builtin function
         let i32_type = ctx.i32_type();
         let putchar_type = i32_type.fn_type(&[i32_type.into()], false);
-        functions.insert("putchar".to_owned());
-        module.add_function("putchar", putchar_type, None);
+        let putchar_val = module.add_function("putchar", putchar_type, None);
+        functions.insert("putchar".to_owned(), putchar_val);
 
         Self {
             ctx: ctx,
@@ -116,17 +119,17 @@ impl<'ctx> Env<'ctx> {
         let tmp = self.builder.build_load(ptr, &var_id);
         tmp.into_int_value()
     }
+
     /// IntValueをPointerValueに変換する
     /// IntValueの名前は任意
-    fn int_to_point(&mut self, int: IntValue, ptr_id: Option<&str>) -> PointerValue<'ctx> {
-        let i32_type = self.ctx.i32_type();
+    fn int_to_point(&mut self, int: IntValue<'ctx>, ptr_id: Option<&str>) -> PointerValue<'ctx> {
         if let Some(ptr_id) = ptr_id {
-            let ptr: PointerValue = self.builder.build_alloca(i32_type, ptr_id);
+            let ptr: PointerValue = self.builder.build_alloca(int.get_type(), ptr_id);
             self.builder.build_store(ptr, int);
             ptr
         } else {
             let var_id = self.get_tmp_var_id();
-            let ptr: PointerValue = self.builder.build_alloca(i32_type, &var_id);
+            let ptr: PointerValue = self.builder.build_alloca(int.get_type(), &var_id);
             self.builder.build_store(ptr, int);
             ptr
         }
@@ -135,23 +138,39 @@ impl<'ctx> Env<'ctx> {
 
 impl Const {
     fn gen_code<'ctx>(self, env: &Env<'ctx>) -> IntValue<'ctx> {
-        let i32_type = env.ctx.i32_type();
-        i32_type.const_int(self.0 as u64, false)
+        match self {
+            Const::I32Const(i) => env.ctx.i32_type().const_int(i as u64, false),
+            Const::I64Const(i) => env.ctx.i64_type().const_int(i as u64, false),
+            Const::BoolConst(b) => env.ctx.bool_type().const_int(b as u64, false),
+            _ => panic!("not support"),
+        }
     }
 }
 
 impl BinOp {
     fn gen_code<'ctx>(self, env: &mut Env<'ctx>) -> PointerValue<'ctx> {
         let i32_type = env.ctx.i32_type();
+        let i64_type = env.ctx.i64_type();
         let bool_type = env.ctx.bool_type();
         let ptr_lhr = self.left.gen_code(env);
         let ptr_rhr = self.right.gen_code(env);
         let builder = &env.builder;
         let tmp_id = env.get_tmp_var_id();
-        let load_lhs = builder.build_load(ptr_lhr, &tmp_id).into_int_value();
+        let load_lhs = builder
+            .build_load(ptr_lhr.unwrap(), &tmp_id)
+            .into_int_value();
 
         let tmp_id = env.get_tmp_var_id();
-        let load_rhs = builder.build_load(ptr_rhr, &tmp_id).into_int_value();
+        let load_rhs = builder
+            .build_load(ptr_rhr.unwrap(), &tmp_id)
+            .into_int_value();
+        if load_rhs.get_type() != load_lhs.get_type() {
+            panic!(
+                "left type != rhs,  {:?} != {:?}",
+                load_rhs.get_type(),
+                load_lhs.get_type()
+            );
+        }
 
         let tmp_id = env.get_tmp_var_id();
 
@@ -182,16 +201,25 @@ impl BinOp {
                 builder.build_int_compare(inkwell::IntPredicate::SLT, load_lhs, load_rhs, &tmp_id),
                 bool_type,
             ),
-            Op::Add => (builder.build_int_add(load_lhs, load_rhs, &tmp_id), i32_type),
-            Op::Sub => (builder.build_int_sub(load_lhs, load_rhs, &tmp_id), i32_type),
-            Op::Mul => (builder.build_int_mul(load_lhs, load_rhs, &tmp_id), i32_type),
+            Op::Add => (
+                builder.build_int_add(load_lhs, load_rhs, &tmp_id),
+                load_lhs.get_type(),
+            ),
+            Op::Sub => (
+                builder.build_int_sub(load_lhs, load_rhs, &tmp_id),
+                load_lhs.get_type(),
+            ),
+            Op::Mul => (
+                builder.build_int_mul(load_lhs, load_rhs, &tmp_id),
+                load_lhs.get_type(),
+            ),
             Op::Div => (
                 builder.build_int_signed_div(load_lhs, load_rhs, &tmp_id),
-                i32_type,
+                load_lhs.get_type(),
             ),
             Op::Mod => (
                 builder.build_int_signed_rem(load_lhs, load_rhs, &tmp_id),
-                i32_type,
+                load_lhs.get_type(),
             ),
         };
 
@@ -203,20 +231,25 @@ impl BinOp {
 }
 
 impl VariableDecl {
-    fn gen_code<'a>(self, env: &mut Env<'a>) {
+    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
         dbg!(&self);
-        let i32_type = env.ctx.i32_type();
+        let var_type = match self.ty {
+            Type::Int32 => env.ctx.i32_type(),
+            Type::Int64 => env.ctx.i64_type(),
+            Type::Bool => env.ctx.bool_type(),
+            _ => panic!("ty: {:?} is unknown", self.ty),
+        };
         if let Some(init) = self.init {
             let init_ptr = init.gen_code(env);
             let tmp_id = env.get_tmp_var_id();
-            let tmp = env.builder.build_load(init_ptr, &tmp_id);
-            let ptr: PointerValue = env.builder.build_alloca(i32_type, &self.id);
+            let tmp = env.builder.build_load(init_ptr.unwrap(), &tmp_id);
+            let ptr: PointerValue = env.builder.build_alloca(var_type, &self.id);
             env.builder.build_store(ptr, tmp.into_int_value());
 
             env.set_variable(self.id.clone(), ptr);
         } else {
-            let ptr: PointerValue = env.builder.build_alloca(i32_type, &self.id);
-            let zero = i32_type.const_int(0, false);
+            let ptr: PointerValue = env.builder.build_alloca(var_type, &self.id);
+            let zero = env.ctx.i32_type().const_int(0, false);
             env.builder.build_store(ptr, zero);
             env.set_variable(self.id.clone(), ptr);
         }
@@ -225,30 +258,43 @@ impl VariableDecl {
 
 impl Variable {
     fn gen_code<'a>(self, env: &Env<'a>) -> PointerValue<'a> {
-        env.get_variable(self.0).unwrap().clone()
+        env.get_variable(self.id).unwrap().clone()
     }
 }
 
 impl Expr {
-    fn gen_code<'a>(self, env: &mut Env<'a>) -> PointerValue<'a> {
+    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) -> Option<PointerValue<'ctx>> {
         match self {
             Expr::Const(cns) => {
                 let tmp = cns.gen_code(env);
                 let tmp_id = env.get_tmp_var_id();
-                let ptr = env.builder.build_alloca(env.ctx.i32_type(), &tmp_id);
+                let ptr = env.builder.build_alloca(tmp.get_type(), &tmp_id);
                 env.builder.build_store(ptr, tmp);
-                ptr
+                Some(ptr)
             }
-            Expr::BinOp(bin_op) => bin_op.gen_code(env),
-            Expr::Variable(var) => var.gen_code(env),
+            Expr::BinOp(bin_op) => Some(bin_op.gen_code(env)),
+            Expr::Variable(var) => Some(var.gen_code(env)),
             Expr::Call(call) => {
                 // always returns value
+                let call_id = call.id.clone();
                 let callsitevalu = call.gen_code(env).try_as_basic_value().left().unwrap();
-
                 let tmp_id = env.get_tmp_var_id();
-                let ptr = env.builder.build_alloca(env.ctx.i32_type(), &tmp_id);
-                env.builder.build_store(ptr, callsitevalu);
-                ptr
+                let f = env.functions.get(&call_id).unwrap();
+                // 関数がvoidを返すならNoneを返す
+                if let Some(ret_type) = f.get_type().get_return_type() {
+                    match ret_type {
+                        BasicTypeEnum::IntType(int_type)
+                            if int_type == env.ctx.i32_type() || int_type == env.ctx.i64_type() =>
+                        {
+                            let ptr = env.builder.build_alloca(int_type, &tmp_id);
+                            env.builder.build_store(ptr, callsitevalu);
+                            Some(ptr)
+                        }
+                        _ => panic!(""),
+                    }
+                } else {
+                    None
+                }
             }
         }
     }
@@ -262,7 +308,7 @@ impl FunctionDecl {
 
         // 現在の関数の情報を設定
         env.function_value = Some(fn_value.clone());
-        if !env.functions.insert(self.id.clone()) {
+        if env.functions.insert(self.id.clone(), fn_value).is_some() {
             panic!("function {} is already decleared", &self.id);
         }
         // 変数マップを作る
@@ -277,9 +323,12 @@ impl FunctionDecl {
         // 引数を使う時
         for (i, arg) in self.args.iter().enumerate() {
             let param = fn_value.get_nth_param(i as u32).unwrap().into_int_value();
+
+            // TODO: type check
+
             // 引数名に対応するptrを作成
-            let ptr_param = env.int_to_point(param, Some(arg));
-            env.set_variable(arg.clone(), ptr_param);
+            let ptr_param = env.int_to_point(param, Some(&arg.id.clone()));
+            env.set_variable(arg.id.clone(), ptr_param);
         }
 
         self.stmts.gen_code(env);
@@ -295,7 +344,7 @@ impl Call {
         // eval exprs
         let mut evaluated_args: Vec<BasicMetadataValueEnum> = vec![];
         for arg in self.args {
-            let evaluated_ptr = arg.gen_code(env);
+            let evaluated_ptr = arg.gen_code(env).unwrap();
             let var_id = env.get_tmp_var_id();
             let evaluated = env.builder.build_load(evaluated_ptr, &var_id);
             evaluated_args.push(evaluated.into());
@@ -310,7 +359,7 @@ impl Call {
 impl IfElse {
     fn gen_code<'a>(self, env: &mut Env<'a>) {
         // generate cond, success, failure block
-        let ptr = self.cond.gen_code(env);
+        let ptr = self.cond.gen_code(env).unwrap();
         let var_id = env.get_tmp_var_id();
         let res = env.builder.build_load(ptr, &var_id).into_int_value();
 
@@ -360,9 +409,13 @@ impl Stmt {
             }
             Stmt::Return(expr) => {
                 let ptr = expr.gen_code(env);
-                let tmp_id = env.get_tmp_var_id();
-                let tmp = env.builder.build_load(ptr, &tmp_id);
-                env.builder.build_return(Some(&tmp));
+                if let Some(pv) = ptr {
+                    let tmp_id = env.get_tmp_var_id();
+                    let tmp = env.builder.build_load(pv, &tmp_id);
+                    env.builder.build_return(Some(&tmp));
+                } else {
+                    env.builder.build_return(None);
+                }
             }
             Stmt::Assign(assign) => {
                 assign.gen_code(env);
@@ -379,7 +432,7 @@ impl Stmt {
 
 impl Assign {
     fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
-        let ptr_right = self.right.gen_code(env);
+        let ptr_right = self.right.gen_code(env).unwrap();
         let tmp_id = env.get_tmp_var_id();
         if let Some(ptr_left) = env.get_variable(self.left.clone()) {
             env.builder.build_store(
@@ -422,7 +475,7 @@ impl For {
 
         // generate cond
         env.builder.position_at_end(cond_block);
-        let ptr = self.cond.gen_code(env);
+        let ptr = self.cond.gen_code(env).unwrap();
         let var_id = env.get_tmp_var_id();
         let res = env.builder.build_load(ptr, &var_id).into_int_value();
         // cond != 0

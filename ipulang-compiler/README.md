@@ -28,21 +28,34 @@
           - [x] 引数のallocaをまだやっていない
 - [x] declare
     - [x] putchar
+
+### Day2
 - [x] 構文追加
     - [x] if
     - [x] for
-- [ ] include
-
-### Day2
-- [ ] LSP
-    - hard
-    - [ ] syntax highlight
-- [ ] web assembly
-- [ ] 型を導入する
+- [x] 型を導入する
+    - [x] i32, i64, bool
+        - [ ] astに型の情報を入れる
+### Day3?
     - [ ] 文字列型の導入
     - [ ] ポインタ型の導入
     - [ ] 配列型の導入
+- [ ] include
 - [ ] (error tracing)
+- [ ] parser書き直す?
+    - [ ] row, columnの情報が欲しい
+- [ ] REPL
+- [ ] 入力
+- [ ] コメント
+- [ ] 構造体
+
+
+### やらないこと
+- [ ] LSP
+    - hard
+    - [ ] syntax highlight
+- [ ] formatter -> ASTを文字列化してそう
+- [ ] web assembly
 
 ## マイルストーン
 - [x] 定数, 四則演算が出来る

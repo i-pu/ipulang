@@ -5,6 +5,7 @@ use clap::Parser;
 mod ast;
 mod codegen;
 mod nodes;
+mod types;
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
 #[clap(about, version, author)]

@@ -1,3 +1,5 @@
+use crate::types::Type;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
     Or,  // ||
@@ -17,11 +19,23 @@ pub enum Op {
 
 /// 定数
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Const(pub i32);
+pub enum Const {
+    I32Const(i32),
+    I64Const(i64),
+    BoolConst(bool),
+}
 
 impl Const {
-    pub fn new(val: i32) -> Const {
-        Const(val)
+    pub fn new_i32(val: i32) -> Const {
+        Const::I32Const(val)
+    }
+
+    pub fn new_i64(val: i64) -> Const {
+        Const::I64Const(val)
+    }
+
+    pub fn new_bool(val: bool) -> Const {
+        Const::BoolConst(val)
     }
 }
 
@@ -30,11 +44,17 @@ pub struct BinOp {
     pub left: Expr,
     pub op: Op,
     pub right: Expr,
+    pub ty: Type,
 }
 
 impl BinOp {
-    pub fn new(left: Expr, op: Op, right: Expr) -> Self {
-        Self { left, op, right }
+    pub fn new(left: Expr, op: Op, right: Expr, ty: Type) -> Self {
+        Self {
+            left,
+            op,
+            right,
+            ty,
+        }
     }
 }
 
@@ -50,20 +70,24 @@ pub enum Expr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariableDecl {
     pub id: String,
+    pub ty: Type,
     pub init: Option<Expr>,
 }
 impl VariableDecl {
-    pub fn new(id: String, init: Option<Expr>) -> Self {
-        VariableDecl { id, init }
+    pub fn new(id: String, ty: Type, init: Option<Expr>) -> Self {
+        VariableDecl { id, ty, init }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Variable(pub String);
+pub struct Variable {
+    pub id: String,
+    pub ty: Type,
+}
 
 impl Variable {
-    pub fn new(id: String) -> Self {
-        Variable(id)
+    pub fn new(id: String, ty: Type) -> Self {
+        Variable { id, ty }
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,13 +102,19 @@ impl Stmts {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FunctionDecl {
     pub id: String,
-    pub args: Vec<String>,
+    pub args: Vec<Variable>,
+    pub ret_typ: Type,
     pub stmts: Stmts,
 }
 
 impl FunctionDecl {
-    pub fn new(id: String, args: Vec<String>, stmts: Stmts) -> Self {
-        Self { id, args, stmts }
+    pub fn new(id: String, args: Vec<Variable>, ret_typ: Type, stmts: Stmts) -> Self {
+        Self {
+            id,
+            args,
+            ret_typ,
+            stmts,
+        }
     }
 }
 

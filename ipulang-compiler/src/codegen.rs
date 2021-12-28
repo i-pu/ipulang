@@ -1,17 +1,20 @@
+use std::borrow::BorrowMut;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use anyhow::{Error, Result};
 use inkwell;
+use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::execution_engine::JitFunction;
 use inkwell::module::Module;
 use inkwell::values::BasicMetadataValueEnum;
 use inkwell::values::CallSiteValue;
+use inkwell::values::FunctionValue;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
-use inkwell::OptimizationLevel;
 
 use crate::ast::program_parser;
 use crate::nodes::*;
@@ -33,7 +36,7 @@ struct Env<'ctx> {
     /// 宣言されている変数一覧
     variables: HashMap<String, HashMap<String, PointerValue<'ctx>>>,
     /// compilerが作った一時変数の個数
-    var_count: usize,
+    var_count: Rc<Cell<usize>>,
     /// 宣言されている関数一覧
     // TODO: 後から宣言できるようにする
     functions: HashSet<String>,
@@ -43,6 +46,8 @@ struct Env<'ctx> {
 
     /// 現在のfunction id
     function: String,
+    /// 現在の FunctionValue
+    function_value: Option<FunctionValue<'ctx>>,
 }
 
 impl<'ctx> Env<'ctx> {
@@ -62,11 +67,24 @@ impl<'ctx> Env<'ctx> {
             ctx: ctx,
             module: module,
             variables: HashMap::new(),
-            var_count: 0,
+            var_count: Rc::new(Cell::new(0)),
             functions: functions,
             builder: ctx.create_builder(),
             function: "".to_owned(),
+            function_value: None,
         }
+    }
+
+    fn get_tmp_var_id(&self) -> String {
+        let tmp = self.var_count.clone();
+        (*tmp).set(tmp.get() + 1);
+        format!("_v{}", self.var_count.get().to_string())
+    }
+
+    fn get_tmp_label_id(&self) -> String {
+        let tmp = self.var_count.clone();
+        (*tmp).set(tmp.get() + 1);
+        format!("label{}", self.var_count.get().to_string())
     }
 
     /// 関数に変数があるかどうか
@@ -94,8 +112,8 @@ impl<'ctx> Env<'ctx> {
     /// PointerValueをIntValueに変換する
     /// IntValueの名前は任意
     fn point_to_int(&mut self, ptr: PointerValue<'ctx>, int_id: Option<String>) -> IntValue {
-        self.var_count += 1;
-        let tmp = self.builder.build_load(ptr, &self.var_count.to_string());
+        let var_id = self.get_tmp_var_id();
+        let tmp = self.builder.build_load(ptr, &var_id);
         tmp.into_int_value()
     }
     /// IntValueをPointerValueに変換する
@@ -107,10 +125,8 @@ impl<'ctx> Env<'ctx> {
             self.builder.build_store(ptr, int);
             ptr
         } else {
-            self.var_count += 1;
-            let ptr: PointerValue = self
-                .builder
-                .build_alloca(i32_type, &self.var_count.to_string());
+            let var_id = self.get_tmp_var_id();
+            let ptr: PointerValue = self.builder.build_alloca(i32_type, &var_id);
             self.builder.build_store(ptr, int);
             ptr
         }
@@ -126,29 +142,49 @@ impl Const {
 
 impl BinOp {
     fn gen_code<'ctx>(self, env: &mut Env<'ctx>) -> PointerValue<'ctx> {
+        let i32_type = env.ctx.i32_type();
         let ptr_lhr = self.left.gen_code(env);
         let ptr_rhr = self.right.gen_code(env);
         let builder = &env.builder;
-        env.var_count += 1;
-        let load_lhr = builder
-            .build_load(ptr_lhr, &env.var_count.to_string())
-            .into_int_value();
-        env.var_count += 1;
+        let tmp_id = env.get_tmp_var_id();
+        let load_lhs = builder.build_load(ptr_lhr, &tmp_id).into_int_value();
 
-        let load_rhr = builder
-            .build_load(ptr_rhr, &env.var_count.to_string())
-            .into_int_value();
-        env.var_count += 1;
+        let tmp_id = env.get_tmp_var_id();
+        let load_rhs = builder.build_load(ptr_rhr, &tmp_id).into_int_value();
 
+        let tmp_id = env.get_tmp_var_id();
         let tmp = match self.op {
-            Op::Add => builder.build_int_add(load_lhr, load_rhr, &env.var_count.to_string()),
-            Op::Sub => builder.build_int_sub(load_lhr, load_rhr, &env.var_count.to_string()),
-            Op::Mul => builder.build_int_mul(load_lhr, load_rhr, &env.var_count.to_string()),
-            Op::Div => builder.build_int_signed_div(load_lhr, load_rhr, &env.var_count.to_string()),
+            Op::Or => builder.build_or(load_lhs, load_rhs, &tmp_id),
+            Op::And => builder.build_and(load_lhs, load_rhs, &tmp_id),
+            // TODO: intしかcompare出来ない
+            Op::Eq => {
+                builder.build_int_compare(inkwell::IntPredicate::EQ, load_lhs, load_rhs, &tmp_id)
+            }
+            // TODO: intしかcompare出来ない
+            Op::Neq => {
+                builder.build_int_compare(inkwell::IntPredicate::NE, load_lhs, load_rhs, &tmp_id)
+            }
+            Op::Geq => {
+                builder.build_int_compare(inkwell::IntPredicate::SGE, load_lhs, load_rhs, &tmp_id)
+            }
+            Op::Leq => {
+                builder.build_int_compare(inkwell::IntPredicate::SLE, load_lhs, load_rhs, &tmp_id)
+            }
+            Op::Gt => {
+                builder.build_int_compare(inkwell::IntPredicate::SGT, load_lhs, load_rhs, &tmp_id)
+            }
+            Op::Lt => {
+                builder.build_int_compare(inkwell::IntPredicate::SLT, load_lhs, load_rhs, &tmp_id)
+            }
+            Op::Add => builder.build_int_add(load_lhs, load_rhs, &tmp_id),
+            Op::Sub => builder.build_int_sub(load_lhs, load_rhs, &tmp_id),
+            Op::Mul => builder.build_int_mul(load_lhs, load_rhs, &tmp_id),
+            Op::Div => builder.build_int_signed_div(load_lhs, load_rhs, &tmp_id),
+            Op::Mod => builder.build_int_signed_rem(load_lhs, load_rhs, &tmp_id),
         };
 
-        env.var_count += 1;
-        let ptr = builder.build_alloca(env.ctx.i32_type(), &env.var_count.to_string());
+        let tmp_id = env.get_tmp_var_id();
+        let ptr = builder.build_alloca(i32_type, &tmp_id);
         builder.build_store(ptr, tmp);
         ptr
     }
@@ -159,9 +195,9 @@ impl VariableDecl {
         dbg!(&self);
         let i32_type = env.ctx.i32_type();
         if let Some(init) = self.init {
-            let tmp_ptr = init.gen_code(env);
-            env.var_count += 1;
-            let tmp = env.builder.build_load(tmp_ptr, &env.var_count.to_string());
+            let init_ptr = init.gen_code(env);
+            let tmp_id = env.get_tmp_var_id();
+            let tmp = env.builder.build_load(init_ptr, &tmp_id);
             let ptr: PointerValue = env.builder.build_alloca(i32_type, &self.id);
             env.builder.build_store(ptr, tmp.into_int_value());
 
@@ -186,10 +222,8 @@ impl Expr {
         match self {
             Expr::Const(cns) => {
                 let tmp = cns.gen_code(env);
-                env.var_count += 1;
-                let ptr = env
-                    .builder
-                    .build_alloca(env.ctx.i32_type(), &env.var_count.to_string());
+                let tmp_id = env.get_tmp_var_id();
+                let ptr = env.builder.build_alloca(env.ctx.i32_type(), &tmp_id);
                 env.builder.build_store(ptr, tmp);
                 ptr
             }
@@ -199,10 +233,8 @@ impl Expr {
                 // always returns value
                 let callsitevalu = call.gen_code(env).try_as_basic_value().left().unwrap();
 
-                env.var_count += 1;
-                let ptr = env
-                    .builder
-                    .build_alloca(env.ctx.i32_type(), &env.var_count.to_string());
+                let tmp_id = env.get_tmp_var_id();
+                let ptr = env.builder.build_alloca(env.ctx.i32_type(), &tmp_id);
                 env.builder.build_store(ptr, callsitevalu);
                 ptr
             }
@@ -212,12 +244,12 @@ impl Expr {
 
 impl FunctionDecl {
     fn gen_code(self, env: &mut Env) {
-        // FIXME: mainのみしか対応していない
         let i32_type = env.ctx.i32_type();
-        // let main_fn_type = i32_type.fn_type(&[i32_type.into()], false);
         let fn_type = i32_type.fn_type(&vec![i32_type.into(); self.args.len()], false);
         let fn_value = env.module.add_function(&self.id, fn_type, None);
 
+        // 現在の関数の情報を設定
+        env.function_value = Some(fn_value.clone());
         if !env.functions.insert(self.id.clone()) {
             panic!("function {} is already decleared", &self.id);
         }
@@ -226,11 +258,11 @@ impl FunctionDecl {
         env.function = self.id.clone();
 
         // block
+        // TODO: main() だけでいいのか？
         let basic_block = env.ctx.append_basic_block(fn_value, "entry");
         env.builder.position_at_end(basic_block);
 
         // 引数を使う時
-        // let param0 = main_fn.get_nth_param(0).unwrap().into_int_value();
         for (i, arg) in self.args.iter().enumerate() {
             let param = fn_value.get_nth_param(i as u32).unwrap().into_int_value();
             // 引数名に対応するptrを作成
@@ -252,17 +284,57 @@ impl Call {
         let mut evaluated_args: Vec<BasicMetadataValueEnum> = vec![];
         for arg in self.args {
             let evaluated_ptr = arg.gen_code(env);
-            env.var_count += 1;
-            let evaluated = env
-                .builder
-                .build_load(evaluated_ptr, &env.var_count.to_string());
+            let var_id = env.get_tmp_var_id();
+            let evaluated = env.builder.build_load(evaluated_ptr, &var_id);
             evaluated_args.push(evaluated.into());
         }
 
         let function = env.module.get_function(&self.id).unwrap();
-        env.var_count += 1;
+        let var_id = env.get_tmp_var_id();
+        env.builder.build_call(function, &evaluated_args, &var_id)
+    }
+}
+
+impl IfElse {
+    fn gen_code<'a>(self, env: &mut Env<'a>) {
+        // generate cond, success, failure block
+        let ptr = self.cond.gen_code(env);
+        let var_id = env.get_tmp_var_id();
+        let cond = env.builder.build_load(ptr, &var_id).into_int_value();
+
+        // cond != 0
+        let i32_type = env.ctx.i32_type();
+        let zero = i32_type.const_int(0, false);
+        let var_id = env.get_tmp_var_id();
+        let res = env
+            .builder
+            .build_int_compare(inkwell::IntPredicate::NE, cond, zero, &var_id);
+
+        // make success, failure, dest label
+        let success_label = env.get_tmp_label_id();
+        let fn_value = env.function_value.clone().unwrap();
+        let success_block = env.ctx.append_basic_block(fn_value, &success_label);
+        let tmp_label = env.get_tmp_label_id();
+        let failure_block = env.ctx.append_basic_block(fn_value, &tmp_label);
+        let label_id = env.get_tmp_label_id();
+        let dest_block = env.ctx.append_basic_block(fn_value, &label_id);
+
         env.builder
-            .build_call(function, &evaluated_args, &env.var_count.to_string())
+            .build_conditional_branch(res, success_block, failure_block);
+
+        env.builder.position_at_end(success_block);
+        // then_block is always exists
+        self.success.gen_code(env);
+        env.builder.build_unconditional_branch(dest_block);
+
+        env.builder.position_at_end(failure_block);
+        // else
+        if let Some(failure) = self.failure {
+            failure.gen_code(env)
+        };
+        env.builder.build_unconditional_branch(dest_block);
+
+        env.builder.position_at_end(dest_block);
     }
 }
 
@@ -277,22 +349,24 @@ impl Stmt {
             }
             Stmt::Return(expr) => {
                 let ptr = expr.gen_code(env);
-                env.var_count += 1;
-                let tmp = env.builder.build_load(ptr, &env.var_count.to_string());
+                let tmp_id = env.get_tmp_var_id();
+                let tmp = env.builder.build_load(ptr, &tmp_id);
                 env.builder.build_return(Some(&tmp));
             }
             Stmt::Assing(assign) => {
                 let ptr_right = assign.right.gen_code(env);
+                let tmp_id = env.get_tmp_var_id();
                 if let Some(ptr_left) = env.get_variable(assign.left.clone()) {
                     env.builder.build_store(
                         ptr_left.clone(),
-                        env.builder
-                            .build_load(ptr_right, &env.var_count.to_string())
-                            .into_int_value(),
+                        env.builder.build_load(ptr_right, &tmp_id).into_int_value(),
                     );
                 } else {
                     panic!("variable {} is not found.", assign.left)
                 }
+            }
+            Stmt::IfElse(if_else) => {
+                if_else.gen_code(env);
             }
         };
     }
@@ -313,24 +387,3 @@ impl Program {
         }
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     #[test]
-//     fn test_add() {
-//         let ast = BinOp::new(
-//             Expr::Const(Const::new(3)),
-//             Op::Add,
-//             Expr::Const(Const::new(3)),
-//         );
-//         let code = ast.gen_code();
-//         assert_eq!(
-//             code,
-//             r#"lit 3
-// lit 3
-// add
-// "#
-//         )
-//     }
-// }

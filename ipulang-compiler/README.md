@@ -35,7 +35,8 @@
 
 ### Day2
 - [ ] LSP
-- [ ] syntax highlight
+    - hard
+    - [ ] syntax highlight
 - [ ] web assembly
 - [ ] 型を導入する
     - [ ] 文字列型の導入

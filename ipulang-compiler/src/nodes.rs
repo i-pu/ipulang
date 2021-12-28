@@ -1,11 +1,18 @@
-use std::env::VarError;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Op {
-    Add,
-    Sub,
-    Mul,
-    Div,
+    Or,  // ||
+    And, // &&
+    Eq,  // ==
+    Neq, // !=
+    Geq, // >=
+    Leq, // <=
+    Gt,  // >
+    Lt,  // <
+    Add, // +
+    Sub, // -
+    Mul, // *
+    Div, // /
+    Mod, // %
 }
 
 /// 定数
@@ -94,11 +101,29 @@ impl Call {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IfElse {
+    pub cond: Expr,
+    pub success: Stmts,
+    pub failure: Option<Stmts>,
+}
+
+impl IfElse {
+    pub fn new(cond: Expr, success: Stmts, failure: Option<Stmts>) -> Self {
+        Self {
+            cond,
+            success,
+            failure,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
     Expr(Expr),
     Return(Expr),
     VariableDecl(VariableDecl),
     Assing(Assing),
+    IfElse(IfElse),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

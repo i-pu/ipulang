@@ -2,25 +2,36 @@
 <function_decl> := 'fn (' [<variable_val>,] ') {' <stmts> '}'
 <stmts> := <stmt> [ <stmts> ]
 <stmt> :
-    = <expr> ';'
+    = <or-expr> ';'
     | <var_decl>
     | <assign>
     | <return>
+    | <if_else>
 
-<return> := 'return' <expr> ';'
-<assign> := <variable_val> = <expr> ';'
-<var_decl>   := 'var' ID (= <expr>)? ';'
-<expr>       := <term> [ ('+'|'-') <expr> ]
-<term>       := <factor> [ ('*'|'/') <term> ]
+<return> := 'return' <or-expr> ';'
+<assign> := <variable_val> '=' <or-expr> ';'
+<var_decl>   := 'var' ID (= <or-expr>)? ';'
+<if_else> := if '(' <or-expr> ')' '{' <stmts> '}' [ else '{' <stmts> '}' ]
+
+https://cs.wmich.edu/~gupta/teaching/cs4850/sumII06/The%20syntax%20of%20C%20in%20Backus-Naur%20form.htm
+<or-expr>             := <and-expr> | <or-expr> '||' <and-expr>
+<and-expr>            := <equality-expr> | <and-expr> '&&' <equality-expr>
+<equality-expr>       := <relational-expr> | <equality-expr> ('==' | '!=') <relational-expr>
+<relational-expr>     := <additive-expr> | <relational-expr> ('>' | '<' | '<=' | '>=') <additive-expr>
+<additive-expr>       := <multiplicative-expr> | <additive-expr> ('+'|'-') <multiplicative-expr>
+<multiplicative-expr> := <factor> | <multiplicative-expr> ('*' | '/' | '%') <factor>
 
 <factor> :
-    = <variable_val> 
-    | <const_val> 
+    = <const_num_val> 
     | <paren_expr> 
     | <call>
-<paren_expr> := '(' <expr> ')'
-<const_val> := 0 | [1-9][0-9]*
+    | <variable_val> 
+<paren_expr> := '(' <or-expr> ')'
+<const_num_val> := 0 | [1-9][0-9]*
+<const_bool_val> := 'true' | 'false'
 <call> = ID '(' <expr>* ')'
 <variable_val> := ID
+
+3 + 4 > 7
 
 ID := [a-zA-Z][a-zA-Z0-9]* 

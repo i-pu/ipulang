@@ -2,17 +2,16 @@ use std::str::FromStr;
 
 use nom::{
     branch::alt,
-    branch::permutation,
     bytes::complete::tag,
     character::complete::{alpha1, alphanumeric0, char, digit1, multispace0, multispace1, one_of},
-    combinator::{cut, map, opt},
+    combinator::{map, opt},
     multi::{many0, many1, separated_list0},
     sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
 
 use crate::nodes::{
-    Assing, BinOp, Call, Const, Expr, FunctionDecl, Op, Program, Stmt, Stmts, Variable,
+    Assing, BinOp, Call, Const, Expr, FunctionDecl, IfElse, Op, Program, Stmt, Stmts, Variable,
     VariableDecl,
 };
 
@@ -45,7 +44,7 @@ pub fn var_decl_parser(s: &str) -> IResult<&str, VariableDecl> {
         map(
             opt(tuple((
                 delimited(multispace0, char('='), multispace0),
-                expr_parser,
+                or_expr_parser,
             ))),
             |opt| opt.map(|a| a.1),
         ),
@@ -54,32 +53,8 @@ pub fn var_decl_parser(s: &str) -> IResult<&str, VariableDecl> {
     Ok((s, VariableDecl::new(name.to_owned(), opt_init)))
 }
 
-// 加減算
-pub fn op1_parser(s: &str) -> IResult<&str, Op> {
-    // dbg!("op_parser");
-    let (ss, op) = delimited(multispace0, one_of("+-"), multispace0)(s)?;
-    let op = match op {
-        '+' => Op::Add,
-        '-' => Op::Sub,
-        _ => panic!("unknown operator: {:?}", op),
-    };
-    Ok((ss, op))
-}
-
-// 乗除算
-pub fn op2_parser(s: &str) -> IResult<&str, Op> {
-    // dbg!("op_parser");
-    let (ss, op) = delimited(multispace0, one_of("*/"), multispace0)(s)?;
-    let op = match op {
-        '*' => Op::Mul,
-        '/' => Op::Div,
-        _ => panic!("unknown operator: {:?}", op),
-    };
-    Ok((ss, op))
-}
-
 pub fn paren_expr_parser(s: &str) -> IResult<&str, Expr> {
-    delimited(char('('), expr_parser, char(')'))(s)
+    delimited(char('('), or_expr_parser, char(')'))(s)
 }
 
 pub fn call_parser(s: &str) -> IResult<&str, Call> {
@@ -88,7 +63,10 @@ pub fn call_parser(s: &str) -> IResult<&str, Call> {
             var_name_parser,
             delimited(
                 terminated(char('('), multispace0),
-                separated_list0(delimited(multispace0, char(','), multispace0), expr_parser),
+                separated_list0(
+                    delimited(multispace0, char(','), multispace0),
+                    or_expr_parser,
+                ),
                 preceded(multispace0, char(')')),
             ),
         )),
@@ -109,28 +87,149 @@ pub fn factor_parser(s: &str) -> IResult<&str, Expr> {
     )(s)
 }
 
-pub fn term_parser(s: &str) -> IResult<&str, Expr> {
+pub fn multiplicative_expr_parser(s: &str) -> IResult<&str, Expr> {
     map(
-        tuple((factor_parser, opt(tuple((op2_parser, term_parser))))),
-        |(fac, a)| {
-            if let Some((op2, term)) = a {
-                Expr::BinOp(Box::new(BinOp::new(fac, op2, term)))
+        tuple((
+            factor_parser,
+            opt(tuple((
+                map(
+                    delimited(multispace0, one_of("*/%"), multispace0),
+                    |c| match c {
+                        '*' => Op::Mul,
+                        '/' => Op::Div,
+                        '%' => Op::Mod,
+                        _ => panic!("unknown operator: {:?}", c),
+                    },
+                ),
+                multiplicative_expr_parser,
+            ))),
+        )),
+        |(factor, option)| {
+            if let Some((op, expr)) = option {
+                Expr::BinOp(Box::new(BinOp::new(factor, op, expr)))
             } else {
-                fac
+                factor
             }
         },
     )(s)
 }
 
-pub fn expr_parser(s: &str) -> IResult<&str, Expr> {
-    // dbg!("expr_parser");
+pub fn additive_expr_parser(s: &str) -> IResult<&str, Expr> {
     map(
-        tuple((term_parser, opt(tuple((op1_parser, expr_parser))))),
-        |(term, a)| {
-            if let Some((op1, expr)) = a {
-                Expr::BinOp(Box::new(BinOp::new(term, op1, expr)))
+        tuple((
+            multiplicative_expr_parser,
+            opt(tuple((
+                map(
+                    delimited(multispace0, one_of("+-"), multispace0),
+                    |c| match c {
+                        '+' => Op::Add,
+                        '-' => Op::Sub,
+                        _ => panic!("unknown operator: {:?}", c),
+                    },
+                ),
+                additive_expr_parser,
+            ))),
+        )),
+        |(multi, option)| {
+            if let Some((op, expr)) = option {
+                Expr::BinOp(Box::new(BinOp::new(multi, op, expr)))
             } else {
-                term
+                multi
+            }
+        },
+    )(s)
+}
+
+pub fn releational_expr_parser(s: &str) -> IResult<&str, Expr> {
+    map(
+        tuple((
+            additive_expr_parser,
+            opt(tuple((
+                map(
+                    delimited(
+                        multispace0,
+                        alt((tag(">="), tag("<="), tag(">"), tag("<"))),
+                        multispace0,
+                    ),
+                    |c| match c {
+                        ">=" => Op::Geq,
+                        "<=" => Op::Leq,
+                        ">" => Op::Gt,
+                        "<" => Op::Lt,
+                        _ => panic!("unknown operator: {:?}", c),
+                    },
+                ),
+                releational_expr_parser,
+            ))),
+        )),
+        |(add, option)| {
+            if let Some((op, expr)) = option {
+                Expr::BinOp(Box::new(BinOp::new(add, op, expr)))
+            } else {
+                add
+            }
+        },
+    )(s)
+}
+pub fn equality_expr_parser(s: &str) -> IResult<&str, Expr> {
+    map(
+        tuple((
+            releational_expr_parser,
+            opt(tuple((
+                map(
+                    delimited(multispace0, alt((tag("=="), tag("!="))), multispace0),
+                    |c| match c {
+                        "==" => Op::Eq,
+                        "!=" => Op::Neq,
+                        _ => panic!("unknown operator: {:?}", c),
+                    },
+                ),
+                equality_expr_parser,
+            ))),
+        )),
+        |(rel, option)| {
+            if let Some((op, expr)) = option {
+                Expr::BinOp(Box::new(BinOp::new(rel, op, expr)))
+            } else {
+                rel
+            }
+        },
+    )(s)
+}
+
+pub fn and_expr_parser(s: &str) -> IResult<&str, Expr> {
+    map(
+        tuple((
+            equality_expr_parser,
+            opt(tuple((
+                delimited(multispace0, tag("&&"), multispace0),
+                and_expr_parser,
+            ))),
+        )),
+        |(rel, option)| {
+            if let Some((_, expr)) = option {
+                Expr::BinOp(Box::new(BinOp::new(rel, Op::And, expr)))
+            } else {
+                rel
+            }
+        },
+    )(s)
+}
+
+pub fn or_expr_parser(s: &str) -> IResult<&str, Expr> {
+    map(
+        tuple((
+            and_expr_parser,
+            opt(tuple((
+                delimited(multispace0, tag("||"), multispace0),
+                or_expr_parser,
+            ))),
+        )),
+        |(rel, option)| {
+            if let Some((_, expr)) = option {
+                Expr::BinOp(Box::new(BinOp::new(rel, Op::Or, expr)))
+            } else {
+                rel
             }
         },
     )(s)
@@ -140,14 +239,43 @@ pub fn assign_parser(s: &str) -> IResult<&str, Assing> {
     let (s, (id, _, expr)) = tuple((
         var_name_parser,
         delimited(multispace0, char('='), multispace0),
-        terminated(expr_parser, terminated(multispace0, char(';'))),
+        terminated(or_expr_parser, terminated(multispace0, char(';'))),
     ))(s)?;
     Ok((s, Assing::new(id, expr)))
 }
 
 pub fn return_parser(s: &str) -> IResult<&str, Expr> {
-    let (s, (_, _, expr, _)) = tuple((tag("return"), multispace1, expr_parser, char(';')))(s)?;
+    let (s, (_, _, expr, _)) = tuple((tag("return"), multispace1, or_expr_parser, char(';')))(s)?;
     Ok((s, expr))
+}
+
+pub fn if_else_parser(s: &str) -> IResult<&str, IfElse> {
+    map(
+        tuple((
+            tag("if"),
+            multispace0,
+            // cond
+            delimited(
+                char('('),
+                delimited(multispace0, or_expr_parser, multispace0),
+                char(')'),
+            ),
+            // success
+            delimited(
+                multispace0,
+                delimited(char('{'), stmts_parser, char('}')),
+                multispace0,
+            ),
+            opt(tag("else")),
+            // failure
+            opt(delimited(
+                multispace0,
+                delimited(char('{'), stmts_parser, char('}')),
+                multispace0,
+            )),
+        )),
+        |(_, _, cond, sucess, _, failure)| IfElse::new(cond, sucess, failure),
+    )(s)
 }
 
 pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
@@ -157,8 +285,9 @@ pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
             map(var_decl_parser, |v| Stmt::VariableDecl(v)),
             map(return_parser, |r| Stmt::Return(r)),
             map(assign_parser, |a| Stmt::Assing(a)),
+            map(if_else_parser, |i| Stmt::IfElse(i)),
             map(
-                tuple((expr_parser, multispace0, char(';'))),
+                tuple((or_expr_parser, multispace0, char(';'))),
                 |(expr, _, _)| Stmt::Expr(expr),
             ),
         )),
@@ -167,7 +296,7 @@ pub fn stmt_parser(s: &str) -> IResult<&str, Stmt> {
 }
 
 pub fn stmts_parser(s: &str) -> IResult<&str, Stmts> {
-    let (s, stmts) = many0(stmt_parser)(s)?;
+    let (s, stmts) = delimited(multispace0, many0(stmt_parser), multispace0)(s)?;
     Ok((s, Stmts::new(stmts)))
 }
 
@@ -209,7 +338,7 @@ mod tests {
     #[test]
     fn test_const() {
         let code = "4";
-        let result = expr_parser(code);
+        let result = or_expr_parser(code);
         assert_eq!(result, Ok(("", Expr::Const(Const::new(4)))));
     }
 
@@ -223,7 +352,7 @@ mod tests {
         )));
 
         for code in codes {
-            let result = expr_parser(code);
+            let result = or_expr_parser(code);
             // dbg!(&expect_expr);
             assert_eq!(
                 result,
@@ -250,7 +379,7 @@ mod tests {
         )));
 
         for code in codes {
-            let result = expr_parser(code);
+            let result = or_expr_parser(code);
             // dbg!(&expect_expr);
             assert_eq!(
                 result,
@@ -276,13 +405,61 @@ mod tests {
         )));
 
         for code in codes {
-            let result = expr_parser(code);
+            let result = or_expr_parser(code);
             // dbg!(&expect_expr);
             assert_eq!(
                 result,
                 Ok(("", expect_expr.clone())),
                 "\n=== code: {} ===\n",
                 code
+            );
+        }
+    }
+
+    #[test]
+    fn test_binop4() {
+        let codes: Vec<&str> = vec!["1 >= 2 == 3"];
+        let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
+            Expr::BinOp(Box::new(
+                BinOp::new(
+                    Expr::Const(Const::new(1)),
+                    Op::Geq,
+                    Expr::Const(Const::new(2)),
+                ), // 1 >= 2
+            )),
+            Op::Eq,                     // ==
+            Expr::Const(Const::new(3)), // 3
+        )));
+
+        for code in codes {
+            let result = or_expr_parser(code);
+            // dbg!(&expect_expr);
+            assert_eq!(
+                result,
+                Ok(("", expect_expr.clone())),
+                "\n=== code: {} ===\n",
+                code
+            );
+        }
+    }
+
+    #[test]
+    fn test_binops() {
+        let codes: Vec<&str> = vec![
+            "1 >= 2 == 3",
+            "1 <= 3 + 2 * 4",
+            "(1 < 3 * 4 + 2) || 3",
+            "3 == 4 + 5",
+            "3 > 4",
+            "1 || 3 && 4",
+        ];
+
+        for code in codes {
+            let (s, expr) = or_expr_parser(code).unwrap();
+            assert_eq!(
+                s, "",
+                "\n=== code: {} ===\n=== expr: {:?} ===\n",
+                code, expr,
             );
         }
     }
@@ -377,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn stmt_test() {
+    fn test_stmt() {
         let codes: Vec<&str> = vec![
             "1;",
             "var a;",
@@ -414,7 +591,7 @@ mod tests {
     }
 
     #[test]
-    fn call_test() {
+    fn test_call() {
         let codes: Vec<&str> = vec![
             "a()",
             "a( )",
@@ -456,6 +633,21 @@ mod tests {
         for code in codes {
             let rest = program_parser(code);
             assert_eq!(rest, expect);
+        }
+    }
+
+    #[test]
+    fn test_if_else() {
+        let codes: Vec<&str> = vec![
+            "if(1) { }",
+            "if(1) { 0; } else { 0; }",
+            "if(1){ 1; } else { if(2){} else {} }",
+            "if (1) { if (2) { 0; } } else { if(0) { 0; }}",
+            "if (1 > 1 && 3 || 3 + 4 > 4 * 5 || 3) { if (2) {} } else { if(0) {}}",
+        ];
+        for code in codes {
+            let (rest, _) = if_else_parser(code).unwrap();
+            assert_eq!(rest, "", "\n=== code: {} ===\n", code);
         }
     }
 }

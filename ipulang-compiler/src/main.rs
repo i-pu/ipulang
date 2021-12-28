@@ -1,4 +1,4 @@
-use std::{fs, io::Read};
+use std::fs;
 
 use clap::Parser;
 

@@ -1,7 +1,7 @@
-fn f(a: i32 , b: i32): i32 {
+fn f(a: i64 , b: i64): i64 {
     return a + b;
 }
 
-fn main(): i32 {
-    return f(1, 0);
+fn main(): i64 {
+    return f(1_i64, f(3_i64, 2_i64));
 }

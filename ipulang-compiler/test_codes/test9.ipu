@@ -1,8 +1,8 @@
 fn main(): i32 {
-    if (0) {
+    if (0_bool) {
         return 1 * 2;
     } else {
-        if (0) {
+        if (0_bool) {
         return 3;
         } else {return 4;}
     }

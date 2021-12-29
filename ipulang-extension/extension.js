@@ -10,7 +10,7 @@ function activate(context) {
         vscode.window.showInformationMessage(`Extension 'vscode-language-server' is now active.`);
 
         const serverOptions = {
-            command: "/home/kafuhamada/Documents/github.com/i-pu/ipulang/ipulang-compiler/target/debug/ipulang-lsp",
+            command: "/home/kafuhamada/Documents/github.com/i-pu/ipulang/target/debug/ipulang-lsp",
             args: [],
         };
         const clientOptions = {
@@ -22,11 +22,13 @@ function activate(context) {
             ],
         };
 
-        client = new languageclient.LanguageClient("ipulang-lsp", serverOptions)
+        client = new languageclient.LanguageClient("ipulang-lsp", serverOptions, clientOptions)
         
-        context.subscriptions.push(vscode.commands.registerCommand('ipulang-extension.restartServer', () => {
-            vscode.window.showInformationMessage(`restartServer`);
-            client.restartServer();
+        context.subscriptions.push(vscode.commands.registerCommand('ipulang-extension.restartServer', async () => {
+            vscode.window.showInformationMessage(`restart server`);
+            await client.stop();
+            client = new languageclient.LanguageClient("ipulang-lsp", serverOptions)
+            client.start();
         }))
 
         client.start();

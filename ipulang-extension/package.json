@@ -1,40 +1,46 @@
 {
-  "name": "ipulang-extension",
-  "private": true,
-  "version": "1.0.0",
-  "description": "ipulang vscode extension",
-  "engines": {
-    "vscode": "^1.52.1"
-  },
-  "main": "./extension.js",
-  "activationEvents": [
-    "onLanguage:ipulang"
-  ],
-  "contributes": {
-    "languages": [
-      {
-        "id": "ipulang",
-        "extensions": [
-          ".ipu"
-        ]
-      }
+	"name": "ipulang-extension",
+	"publisher": "i-pu",
+	"version": "1.0.0",
+	"description": "ipulang vscode extension",
+	"engines": {
+		"vscode": "^1.52.1"
+	},
+	"main": "./extension.js",
+	"activationEvents": [
+		"onLanguage:ipulang"
+	],
+	"contributes": {
+		"languages": [
+			{
+				"id": "ipulang",
+				"extensions": [
+					".ipu"
+				]
+			}
 		],
-	"commands": [
+		"commands": [
 			{
 				"command": "ipulang-extension.restartServer",
 				"title": "ipulang-extension: restart ipulang-lsp"
 			}
-    ]
-  },
-  "dependencies": {
-    "vscode-languageclient": "^7.0.0"
-  },
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [
-    "ipulang"
-  ],
-  "author": "",
-  "license": "MIT"
+		]
+	},
+	"dependencies": {
+		"vscode-languageclient": "^7.0.0"
+	},
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [
+		"ipulang"
+	],
+	"author": "",
+	"license": "MIT",
+	"__metadata": {
+		"id": "d813fad0-5061-4816-a362-34876ee4af23",
+		"publisherDisplayName": "i-pu",
+		"publisherId": "2548cba5-86a4-401e-9c70-659fdaca44f0",
+		"isPreReleaseVersion": false
+	}
 }

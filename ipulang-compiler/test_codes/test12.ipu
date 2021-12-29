@@ -1,5 +1,7 @@
-fn main(): unit {
+fn main(): i32 {
     if (5 % 5 == 0) {
-
+        putchar(69);
+        return 0 ;
     }
+    return 3;
 }

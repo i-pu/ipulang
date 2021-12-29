@@ -362,9 +362,19 @@ pub fn function_parameters_parser(s: &str) -> IResult<&str, Vec<Variable>> {
         char('('),
         delimited(
             multispace0,
-            many0(map(tuple((var_name_parser, type_parser)), |(id, typ)| {
-                Variable::new(id, typ)
-            })),
+            separated_list0(
+                tuple((multispace0, char(','), multispace0)),
+                map(
+                    tuple((
+                        var_name_parser,
+                        multispace0,
+                        char(':'),
+                        multispace0,
+                        type_parser,
+                    )),
+                    |(id, _, _, _, typ)| Variable::new(id, typ),
+                ),
+            ),
             multispace0,
         ),
         char(')'),
@@ -372,12 +382,12 @@ pub fn function_parameters_parser(s: &str) -> IResult<&str, Vec<Variable>> {
 }
 
 // 関数宣言
-// TODO: みづらい
 pub fn function_decl_parser(s: &str) -> IResult<&str, FunctionDecl> {
-    let (s, (_, _, name, params, _, _, _, typ, _, stmts)) = tuple((
+    let (s, (_, _, name, _, params, _, _, _, typ, _, stmts)) = tuple((
         tag("fn"),
         multispace1,
         var_name_parser,
+        multispace0,
         function_parameters_parser,
         multispace0,
         char(':'),
@@ -415,108 +425,88 @@ mod tests {
     #[test]
     fn test_binop_add() {
         let codes: Vec<&str> = vec!["1+2", "1   +2", "1 + 2"];
-        let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
-            Expr::Const(Const::new_i32(1)),
-            Op::Add,
-            Expr::Const(Const::new_i32(2)),
-            Type::Unknown,
-        )));
 
         for code in codes {
             let result = or_expr_parser(code);
+            let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
+                Expr::Const(Const::new_i32(1)),
+                Op::Add,
+                Expr::Const(Const::new_i32(2)),
+                Type::Unknown,
+            )));
             // dbg!(&expect_expr);
-            assert_eq!(
-                result,
-                Ok(("", expect_expr.clone())),
-                "\n=== code: {} ===\n",
-                code
-            );
+            assert_eq!(result, Ok(("", expect_expr)), "\n=== code: {} ===\n", code);
         }
     }
 
     #[test]
     fn test_binop2() {
         let codes: Vec<&str> = vec!["1 + 2 + 3"];
-        let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
-            Expr::Const(Const::new_i32(1)), // 1
-            Op::Add,                        // +
-            Expr::BinOp(Box::new(
-                BinOp::new(
-                    Expr::Const(Const::new_i32(2)),
-                    Op::Add,
-                    Expr::Const(Const::new_i32(3)),
-                    Type::Unknown,
-                ), // 2 + 3
-            )),
-            Type::Unknown,
-        )));
-
         for code in codes {
+            let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
+                Expr::Const(Const::new_i32(1)), // 1
+                Op::Add,                        // +
+                Expr::BinOp(Box::new(
+                    BinOp::new(
+                        Expr::Const(Const::new_i32(2)),
+                        Op::Add,
+                        Expr::Const(Const::new_i32(3)),
+                        Type::Unknown,
+                    ), // 2 + 3
+                )),
+                Type::Unknown,
+            )));
+
             let result = or_expr_parser(code);
             // dbg!(&expect_expr);
-            assert_eq!(
-                result,
-                Ok(("", expect_expr.clone())),
-                "\n=== code: {} ===\n",
-                code
-            );
+            assert_eq!(result, Ok(("", expect_expr)), "\n=== code: {} ===\n", code);
         }
     }
     #[test]
     fn test_binop3() {
         let codes: Vec<&str> = vec!["1 * 2 + 3"];
-        let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
-            Expr::BinOp(Box::new(
-                BinOp::new(
-                    Expr::Const(Const::new_i32(1)),
-                    Op::Mul,
-                    Expr::Const(Const::new_i32(2)),
-                    Type::Unknown,
-                ), // 1 * 2
-            )),
-            Op::Add,                        // +
-            Expr::Const(Const::new_i32(3)), // 3
-            Type::Unknown,
-        )));
 
         for code in codes {
+            let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
+                Expr::BinOp(Box::new(
+                    BinOp::new(
+                        Expr::Const(Const::new_i32(1)),
+                        Op::Mul,
+                        Expr::Const(Const::new_i32(2)),
+                        Type::Unknown,
+                    ), // 1 * 2
+                )),
+                Op::Add,                        // +
+                Expr::Const(Const::new_i32(3)), // 3
+                Type::Unknown,
+            )));
             let result = or_expr_parser(code);
             // dbg!(&expect_expr);
-            assert_eq!(
-                result,
-                Ok(("", expect_expr.clone())),
-                "\n=== code: {} ===\n",
-                code
-            );
+            assert_eq!(result, Ok(("", expect_expr)), "\n=== code: {} ===\n", code);
         }
     }
 
     #[test]
     fn test_binop4() {
         let codes: Vec<&str> = vec!["1 >= 2 == 3"];
-        let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
-            Expr::BinOp(Box::new(
-                BinOp::new(
-                    Expr::Const(Const::new_i32(1)),
-                    Op::Geq,
-                    Expr::Const(Const::new_i32(2)),
-                    Type::Unknown,
-                ), // 1 >= 2
-            )),
-            Op::Eq,                         // ==
-            Expr::Const(Const::new_i32(3)), // 3
-            Type::Unknown,
-        )));
 
         for code in codes {
+            let expect_expr: Expr = Expr::BinOp(Box::new(BinOp::new(
+                Expr::BinOp(Box::new(
+                    BinOp::new(
+                        Expr::Const(Const::new_i32(1)),
+                        Op::Geq,
+                        Expr::Const(Const::new_i32(2)),
+                        Type::Unknown,
+                    ), // 1 >= 2
+                )),
+                Op::Eq,                         // ==
+                Expr::Const(Const::new_i32(3)), // 3
+                Type::Unknown,
+            )));
             let result = or_expr_parser(code);
             // dbg!(&expect_expr);
-            assert_eq!(
-                result,
-                Ok(("", expect_expr.clone())),
-                "\n=== code: {} ===\n",
-                code
-            );
+            assert_eq!(result, Ok(("", expect_expr)), "\n=== code: {} ===\n", code);
         }
     }
 
@@ -544,20 +534,20 @@ mod tests {
     #[test]
     fn test_vardecl1() {
         let codes: Vec<&str> = vec!["var a: i32;", "var   a : i32;"];
-        let expect_expr: VariableDecl = VariableDecl::new("a".to_owned(), Type::Int32, None);
         for code in codes {
+            let expect_expr: VariableDecl = VariableDecl::new("a".to_owned(), Type::Int32, None);
             let result = var_decl_parser(code);
-            assert_eq!(result, Ok(("", expect_expr.clone())));
+            assert_eq!(result, Ok(("", expect_expr)));
         }
     }
     #[test]
     fn test_vardecl2() {
         let codes: Vec<&str> = vec!["var ababaAFAF: i32 ;", "var   ababaAFAF: i32;"];
-        let expect_expr: VariableDecl =
-            VariableDecl::new("ababaAFAF".to_owned(), Type::Int32, None);
         for code in codes {
+            let expect_expr: VariableDecl =
+                VariableDecl::new("ababaAFAF".to_owned(), Type::Int32, None);
             let result = var_decl_parser(code);
-            assert_eq!(result, Ok(("", expect_expr.clone())));
+            assert_eq!(result, Ok(("", expect_expr)));
         }
     }
 
@@ -574,23 +564,23 @@ mod tests {
     fn test_stmt1() {
         let codes: Vec<&str> = vec!["1 * 2 + 3;", "1 * 2 + 3   ;"];
 
-        let expect_expr: Stmt = Stmt::Expr(Expr::BinOp(Box::new(BinOp::new(
-            Expr::BinOp(Box::new(
-                BinOp::new(
-                    Expr::Const(Const::new_i32(1)),
-                    Op::Mul,
-                    Expr::Const(Const::new_i32(2)),
-                    Type::Unknown,
-                ), // 1 * 2
-            )),
-            Op::Add,                        // +
-            Expr::Const(Const::new_i32(3)), // 3
-            Type::Unknown,
-        ))));
-
         for code in codes {
+            let expect_expr: Stmt = Stmt::Expr(Expr::BinOp(Box::new(BinOp::new(
+                Expr::BinOp(Box::new(
+                    BinOp::new(
+                        Expr::Const(Const::new_i32(1)),
+                        Op::Mul,
+                        Expr::Const(Const::new_i32(2)),
+                        Type::Unknown,
+                    ), // 1 * 2
+                )),
+                Op::Add,                        // +
+                Expr::Const(Const::new_i32(3)), // 3
+                Type::Unknown,
+            ))));
+
             let result = stmt_parser(code);
-            assert_eq!(result, Ok(("", expect_expr.clone())));
+            assert_eq!(result, Ok(("", expect_expr)));
         }
     }
 

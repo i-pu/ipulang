@@ -39,7 +39,7 @@ impl Const {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct BinOp {
     pub left: Expr,
     pub op: Op,
@@ -59,7 +59,7 @@ impl BinOp {
 }
 
 /// 式
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Const(Const),
     Variable(Variable),
@@ -67,19 +67,20 @@ pub enum Expr {
     Call(Call),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct VariableDecl {
     pub id: String,
     pub ty: Type,
     pub init: Option<Expr>,
 }
+
 impl VariableDecl {
     pub fn new(id: String, ty: Type, init: Option<Expr>) -> Self {
         VariableDecl { id, ty, init }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct Variable {
     pub id: String,
     pub ty: Type,
@@ -90,7 +91,7 @@ impl Variable {
         Variable { id, ty }
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct Stmts(pub Vec<Stmt>);
 
 impl Stmts {
@@ -99,7 +100,7 @@ impl Stmts {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct FunctionDecl {
     pub id: String,
     pub args: Vec<Variable>,
@@ -118,7 +119,7 @@ impl FunctionDecl {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct Call {
     pub id: String,
     pub args: Vec<Expr>,
@@ -130,7 +131,7 @@ impl Call {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct IfElse {
     pub cond: Expr,
     pub success: Stmts,
@@ -147,7 +148,7 @@ impl IfElse {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct For {
     pub var_decl: VariableDecl,
     pub cond: Expr,
@@ -166,7 +167,7 @@ impl For {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
     Return(Expr),
@@ -176,7 +177,7 @@ pub enum Stmt {
     For(For),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct Program(pub Vec<FunctionDecl>);
 
 impl Program {
@@ -185,7 +186,7 @@ impl Program {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct Assign {
     pub left: String,
     pub right: Expr,

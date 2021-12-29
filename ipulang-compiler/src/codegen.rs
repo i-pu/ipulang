@@ -1,32 +1,21 @@
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::rc::Rc;
 
 use anyhow::{Error, Result};
 use inkwell;
-use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
-use inkwell::types::BasicTypeEnum;
-use inkwell::types::IntType;
-use inkwell::values::BasicMetadataValueEnum;
-use inkwell::values::BasicValueEnum;
-use inkwell::values::CallSiteValue;
-use inkwell::values::FunctionValue;
-use inkwell::values::IntValue;
-use inkwell::values::PointerValue;
+use inkwell::types::*;
+use inkwell::values::*;
 
-use crate::ast::program_parser;
 use crate::nodes::*;
 use crate::types::*;
 
-pub fn compile(code: String) -> Result<String, Box<Error>> {
-    let ast = program_parser(&code);
+pub fn code_gen(ast: Program) -> Result<String, Box<Error>> {
     let context = Context::create();
     let mut env = Env::new(&context);
-
     ast.gen_code(&mut env);
     Ok(env.module.print_to_string().to_string())
 }
@@ -60,11 +49,16 @@ impl<'ctx> Env<'ctx> {
 
         let mut functions = HashMap::new();
 
-        // decrare builtin function
+        // decrare putchar(i32): i32
         let i32_type = ctx.i32_type();
         let putchar_type = i32_type.fn_type(&[i32_type.into()], false);
         let putchar_val = module.add_function("putchar", putchar_type, None);
         functions.insert("putchar".to_owned(), putchar_val);
+
+        // decrate getchar(): i32
+        let getchar_type = i32_type.fn_type(&[], false);
+        let getchar_val = module.add_function("getchar", getchar_type, None);
+        functions.insert("getchar".to_owned(), getchar_val);
 
         Self {
             ctx: ctx,
@@ -134,6 +128,25 @@ impl<'ctx> Env<'ctx> {
             ptr
         }
     }
+
+    fn get_llvm_fn_type(&mut self, typ: Type) -> Option<BasicTypeEnum<'ctx>> {
+        match typ {
+            Type::Unit => None,
+            Type::Int32 => Some(self.ctx.i32_type().into()),
+            Type::Int64 => Some(self.ctx.i64_type().into()),
+            Type::Bool => Some(self.ctx.bool_type().into()),
+            _ => panic!("type: {} is unknown", typ),
+        }
+    }
+
+    fn get_llvm_value_type(&mut self, typ: Type) -> BasicMetadataTypeEnum<'ctx> {
+        match typ {
+            Type::Int32 => self.ctx.i32_type().into(),
+            Type::Int64 => self.ctx.i64_type().into(),
+            Type::Bool => self.ctx.bool_type().into(),
+            _ => panic!("type: {} is unknown", typ),
+        }
+    }
 }
 
 impl Const {
@@ -164,14 +177,6 @@ impl BinOp {
         let load_rhs = builder
             .build_load(ptr_rhr.unwrap(), &tmp_id)
             .into_int_value();
-        if load_rhs.get_type() != load_lhs.get_type() {
-            panic!(
-                "left type != rhs,  {:?} != {:?}",
-                load_rhs.get_type(),
-                load_lhs.get_type()
-            );
-        }
-
         let tmp_id = env.get_tmp_var_id();
 
         let (tmp, result_type) = match self.op {
@@ -232,7 +237,6 @@ impl BinOp {
 
 impl VariableDecl {
     fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
-        dbg!(&self);
         let var_type = match self.ty {
             Type::Int32 => env.ctx.i32_type(),
             Type::Int64 => env.ctx.i64_type(),
@@ -277,7 +281,7 @@ impl Expr {
             Expr::Call(call) => {
                 // always returns value
                 let call_id = call.id.clone();
-                let callsitevalu = call.gen_code(env).try_as_basic_value().left().unwrap();
+                let callsitevalu = call.gen_code(env);
                 let tmp_id = env.get_tmp_var_id();
                 let f = env.functions.get(&call_id).unwrap();
                 // 関数がvoidを返すならNoneを返す
@@ -287,7 +291,10 @@ impl Expr {
                             if int_type == env.ctx.i32_type() || int_type == env.ctx.i64_type() =>
                         {
                             let ptr = env.builder.build_alloca(int_type, &tmp_id);
-                            env.builder.build_store(ptr, callsitevalu);
+                            env.builder.build_store(
+                                ptr,
+                                callsitevalu.try_as_basic_value().left().unwrap(),
+                            );
                             Some(ptr)
                         }
                         _ => panic!(""),
@@ -297,45 +304,6 @@ impl Expr {
                 }
             }
         }
-    }
-}
-
-impl FunctionDecl {
-    fn gen_code(self, env: &mut Env) {
-        let i32_type = env.ctx.i32_type();
-        let fn_type = i32_type.fn_type(&vec![i32_type.into(); self.args.len()], false);
-        let fn_value = env.module.add_function(&self.id, fn_type, None);
-
-        // 現在の関数の情報を設定
-        env.function_value = Some(fn_value.clone());
-        if env.functions.insert(self.id.clone(), fn_value).is_some() {
-            panic!("function {} is already decleared", &self.id);
-        }
-        // 変数マップを作る
-        env.variables.entry(self.id.clone()).or_default();
-        env.function = self.id.clone();
-
-        // block
-        // TODO: main() だけでいいのか？
-        let basic_block = env.ctx.append_basic_block(fn_value, "entry");
-        env.builder.position_at_end(basic_block);
-
-        // 引数を使う時
-        for (i, arg) in self.args.iter().enumerate() {
-            let param = fn_value.get_nth_param(i as u32).unwrap().into_int_value();
-
-            // TODO: type check
-
-            // 引数名に対応するptrを作成
-            let ptr_param = env.int_to_point(param, Some(&arg.id.clone()));
-            env.set_variable(arg.id.clone(), ptr_param);
-        }
-
-        self.stmts.gen_code(env);
-
-        // returnがないときも0をかえすようにしている
-        let zero = i32_type.const_int(0, false);
-        env.builder.build_return(Some(&zero));
     }
 }
 
@@ -395,38 +363,6 @@ impl IfElse {
         env.builder.build_unconditional_branch(dest_block);
 
         env.builder.position_at_end(dest_block);
-    }
-}
-
-impl Stmt {
-    fn gen_code<'a>(self, env: &mut Env<'a>) {
-        match self {
-            Stmt::Expr(expr) => {
-                expr.gen_code(env);
-            }
-            Stmt::VariableDecl(decl) => {
-                decl.gen_code(env);
-            }
-            Stmt::Return(expr) => {
-                let ptr = expr.gen_code(env);
-                if let Some(pv) = ptr {
-                    let tmp_id = env.get_tmp_var_id();
-                    let tmp = env.builder.build_load(pv, &tmp_id);
-                    env.builder.build_return(Some(&tmp));
-                } else {
-                    env.builder.build_return(None);
-                }
-            }
-            Stmt::Assign(assign) => {
-                assign.gen_code(env);
-            }
-            Stmt::IfElse(if_else) => {
-                if_else.gen_code(env);
-            }
-            Stmt::For(for_) => {
-                for_.gen_code(env);
-            }
-        };
     }
 }
 
@@ -506,11 +442,106 @@ impl For {
     }
 }
 
+impl Stmt {
+    fn gen_code<'a>(self, env: &mut Env<'a>) {
+        match self {
+            Stmt::Expr(expr) => {
+                expr.gen_code(env);
+            }
+            Stmt::VariableDecl(decl) => {
+                decl.gen_code(env);
+            }
+            Stmt::Return(expr) => {
+                let ptr = expr.gen_code(env);
+                if let Some(pv) = ptr {
+                    let tmp_id = env.get_tmp_var_id();
+                    let tmp = env.builder.build_load(pv, &tmp_id);
+                    env.builder.build_return(Some(&tmp));
+                } else {
+                    env.builder.build_return(None);
+                }
+            }
+            Stmt::Assign(assign) => {
+                assign.gen_code(env);
+            }
+            Stmt::IfElse(if_else) => {
+                if_else.gen_code(env);
+            }
+            Stmt::For(for_) => {
+                for_.gen_code(env);
+            }
+        };
+    }
+}
+
 impl Stmts {
     fn gen_code<'a>(self, env: &mut Env<'a>) {
         for stmt in self.0 {
             stmt.gen_code(env);
         }
+    }
+}
+
+impl FunctionDecl {
+    fn gen_code(self, env: &mut Env) {
+        let llvm_ret_typ = env.get_llvm_fn_type(self.ret_typ.clone());
+
+        let fn_type: FunctionType = if let Some(llvm_ret_type) = llvm_ret_typ {
+            llvm_ret_type.fn_type(
+                &self
+                    .args
+                    .iter()
+                    .map(|arg| env.get_llvm_value_type(arg.ty.clone()))
+                    .collect::<Vec<BasicMetadataTypeEnum>>(),
+                false,
+            )
+        } else {
+            env.ctx.void_type().fn_type(
+                &self
+                    .args
+                    .iter()
+                    .map(|arg| env.get_llvm_value_type(arg.ty.clone()))
+                    .collect::<Vec<BasicMetadataTypeEnum>>(),
+                false,
+            )
+        };
+
+        let fn_value = env.module.add_function(&self.id, fn_type, None);
+
+        // 現在の関数の情報を設定
+        env.function_value = Some(fn_value.clone());
+        env.function = self.id.clone();
+        if env.functions.insert(self.id.clone(), fn_value).is_some() {
+            panic!("function {} is already decleared", &self.id);
+        }
+        // 変数マップを作る
+        env.variables.entry(self.id.clone()).or_default();
+
+        // block
+        // TODO: main() だけでいいのか？
+        let basic_block = env.ctx.append_basic_block(fn_value, "entry");
+        env.builder.position_at_end(basic_block);
+
+        // 引数を使う時
+        for (i, arg) in self.args.iter().enumerate() {
+            let param = fn_value.get_nth_param(i as u32).unwrap().into_int_value();
+
+            // TODO: type check
+
+            // 引数名に対応するptrを作成
+            let ptr_param = env.int_to_point(param, Some(&arg.id.clone()));
+            env.set_variable(arg.id.clone(), ptr_param);
+        }
+
+        self.stmts.gen_code(env);
+
+        // returnがないときも0をかえすようにしている
+        if llvm_ret_typ.is_none() {
+            env.builder.build_return(None);
+        }
+
+        env.function_value = None;
+        env.function = "".to_owned();
     }
 }
 

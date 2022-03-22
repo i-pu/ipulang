@@ -1,2 +1,8 @@
 [workspace]
-members = ["ipulang-compiler"]
+members = [
+    "ipulang-parser",
+    "ipulang-typecheck",
+    "ipulang-codegen",
+    "ipulang-lsp",
+    "ipulang-compiler"
+]

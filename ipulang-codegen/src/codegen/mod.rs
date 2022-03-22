@@ -1,242 +1,145 @@
-use std::cell::Cell;
-use std::collections::HashMap;
-use std::rc::Rc;
+pub mod context;
 
 use anyhow::{Error, Result};
 use inkwell;
-use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::Module;
 use inkwell::types::*;
 use inkwell::values::*;
+use ipulang_parser::nodes::*;
+use ipulang_parser::types::Type;
 
-use crate::nodes::*;
-use crate::types::*;
+use self::context::Env;
+
+type VoidValue<'ll> = IntValue<'ll>;
 
 pub fn code_gen(ast: Program) -> Result<String, Box<Error>> {
     let context = Context::create();
     let mut env = Env::new(&context);
-    ast.gen_code(&mut env);
+    ast.code_gen(&mut env);
     Ok(env.module.print_to_string().to_string())
 }
 
-/// コード生成時のための情報
-struct Env<'ctx> {
-    module: Module<'ctx>,
-    ctx: &'ctx Context,
-    /// function id -> variable id -> PointerValue
-    /// 宣言されている変数一覧
-    variables: HashMap<String, HashMap<String, PointerValue<'ctx>>>,
-    /// compilerが作った一時変数の個数
-    var_count: Rc<Cell<usize>>,
-    /// 宣言されている関数一覧
-    // TODO: 後から宣言できるようにする
-    functions: HashMap<String, FunctionValue<'ctx>>,
-
-    /// 現在の builder
-    builder: Builder<'ctx>,
-
-    /// 現在のfunction id
-    function: String,
-    /// 現在の FunctionValue
-    function_value: Option<FunctionValue<'ctx>>,
+trait CodeGen<'ll, T: 'll + AnyValue<'ll>> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<T>;
 }
 
-impl<'ctx> Env<'ctx> {
-    fn new(ctx: &'ctx Context) -> Self {
-        // module
-        let module = ctx.create_module("main");
-
-        let mut functions = HashMap::new();
-
-        // decrare putchar(i32): i32
-        let i32_type = ctx.i32_type();
-        let putchar_type = i32_type.fn_type(&[i32_type.into()], false);
-        let putchar_val = module.add_function("putchar", putchar_type, None);
-        functions.insert("putchar".to_owned(), putchar_val);
-
-        // decrate getchar(): i32
-        let getchar_type = i32_type.fn_type(&[], false);
-        let getchar_val = module.add_function("getchar", getchar_type, None);
-        functions.insert("getchar".to_owned(), getchar_val);
-
-        Self {
-            ctx: ctx,
-            module: module,
-            variables: HashMap::new(),
-            var_count: Rc::new(Cell::new(0)),
-            functions: functions,
-            builder: ctx.create_builder(),
-            function: "".to_owned(),
-            function_value: None,
-        }
-    }
-
-    fn get_tmp_var_id(&self) -> String {
-        let tmp = self.var_count.clone();
-        (*tmp).set(tmp.get() + 1);
-        format!("_v{}", self.var_count.get().to_string())
-    }
-
-    fn get_tmp_label_id(&self) -> String {
-        let tmp = self.var_count.clone();
-        (*tmp).set(tmp.get() + 1);
-        format!("label{}", self.var_count.get().to_string())
-    }
-
-    /// 関数に変数があるかどうか
-    fn contains(&self, name: String) -> bool {
-        self.variables
-            .get(&self.function)
-            .map(|m: &HashMap<String, PointerValue>| m.contains_key(&name))
-            .unwrap_or(false)
-    }
-
-    /// 関数に宣言されている変数を取得
-    fn get_variable(&self, name: String) -> Option<&'_ PointerValue<'ctx>> {
-        self.variables
-            .get(&self.function)
-            .map(|m| m.get(&name))
-            .flatten()
-    }
-
-    /// 関数に変数情報を登録する
-    fn set_variable(&mut self, name: String, value: PointerValue<'ctx>) {
-        let mut map = self.variables.get_mut(&self.function).unwrap();
-        map.insert(name, value);
-    }
-
-    /// PointerValueをIntValueに変換する
-    /// IntValueの名前は任意
-    fn point_to_int(&mut self, ptr: PointerValue<'ctx>, int_id: Option<String>) -> IntValue {
-        let var_id = self.get_tmp_var_id();
-        let tmp = self.builder.build_load(ptr, &var_id);
-        tmp.into_int_value()
-    }
-
-    /// IntValueをPointerValueに変換する
-    /// IntValueの名前は任意
-    fn int_to_point(&mut self, int: IntValue<'ctx>, ptr_id: Option<&str>) -> PointerValue<'ctx> {
-        if let Some(ptr_id) = ptr_id {
-            let ptr: PointerValue = self.builder.build_alloca(int.get_type(), ptr_id);
-            self.builder.build_store(ptr, int);
-            ptr
-        } else {
-            let var_id = self.get_tmp_var_id();
-            let ptr: PointerValue = self.builder.build_alloca(int.get_type(), &var_id);
-            self.builder.build_store(ptr, int);
-            ptr
-        }
-    }
-
-    fn get_llvm_fn_type(&mut self, typ: Type) -> Option<BasicTypeEnum<'ctx>> {
-        match typ {
-            Type::Unit => None,
-            Type::Int32 => Some(self.ctx.i32_type().into()),
-            Type::Int64 => Some(self.ctx.i64_type().into()),
-            Type::Bool => Some(self.ctx.bool_type().into()),
-            _ => panic!("type: {} is unknown", typ),
-        }
-    }
-
-    fn get_llvm_value_type(&mut self, typ: Type) -> BasicMetadataTypeEnum<'ctx> {
-        match typ {
-            Type::Int32 => self.ctx.i32_type().into(),
-            Type::Int64 => self.ctx.i64_type().into(),
-            Type::Bool => self.ctx.bool_type().into(),
-            _ => panic!("type: {} is unknown", typ),
-        }
-    }
-}
-
-impl Const {
-    fn gen_code<'ctx>(self, env: &Env<'ctx>) -> IntValue<'ctx> {
+impl<'ll> CodeGen<'ll, IntValue<'ll>> for Const {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<IntValue<'ll>> {
         match self {
-            Const::I32Const(i) => env.ctx.i32_type().const_int(i as u64, false),
-            Const::I64Const(i) => env.ctx.i64_type().const_int(i as u64, false),
-            Const::BoolConst(b) => env.ctx.bool_type().const_int(b as u64, false),
+            Const::I32Const(i) => Some(env.ctx.i32_type().const_int(i as u64, false)),
+            Const::I64Const(i) => Some(env.ctx.i64_type().const_int(i as u64, false)),
+            Const::BoolConst(b) => Some(env.ctx.bool_type().const_int(b as u64, false)),
             _ => panic!("not support"),
         }
     }
 }
 
-impl BinOp {
-    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) -> PointerValue<'ctx> {
-        let i32_type = env.ctx.i32_type();
-        let i64_type = env.ctx.i64_type();
+impl<'ll> CodeGen<'ll, PointerValue<'ll>> for BinOp<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<PointerValue<'ll>> {
         let bool_type = env.ctx.bool_type();
-        let ptr_lhr = self.left.gen_code(env);
-        let ptr_rhr = self.right.gen_code(env);
-        let builder = &env.builder;
-        let tmp_id = env.get_tmp_var_id();
-        let load_lhs = builder
-            .build_load(ptr_lhr.unwrap(), &tmp_id)
-            .into_int_value();
 
         let tmp_id = env.get_tmp_var_id();
-        let load_rhs = builder
-            .build_load(ptr_rhr.unwrap(), &tmp_id)
-            .into_int_value();
+        let ptr_lhr = self.left.code_gen(env).unwrap();
+        let load_lhs = env.builder.build_load(ptr_lhr, &tmp_id).into_int_value();
+
+        let tmp_id = env.get_tmp_var_id();
+        let ptr_rhr = self.right.code_gen(env).unwrap();
+        let load_rhs = env.builder.build_load(ptr_rhr, &tmp_id).into_int_value();
         let tmp_id = env.get_tmp_var_id();
 
         let (tmp, result_type) = match self.op {
-            Op::Or => (builder.build_or(load_lhs, load_rhs, &tmp_id), bool_type),
-            Op::And => (builder.build_and(load_lhs, load_rhs, &tmp_id), bool_type),
+            Op::Or => (env.builder.build_or(load_lhs, load_rhs, &tmp_id), bool_type),
+            Op::And => (
+                env.builder.build_and(load_lhs, load_rhs, &tmp_id),
+                bool_type,
+            ),
             Op::Eq => (
-                builder.build_int_compare(inkwell::IntPredicate::EQ, load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    load_lhs,
+                    load_rhs,
+                    &tmp_id,
+                ),
                 bool_type,
             ),
             Op::Neq => (
-                builder.build_int_compare(inkwell::IntPredicate::NE, load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_compare(
+                    inkwell::IntPredicate::NE,
+                    load_lhs,
+                    load_rhs,
+                    &tmp_id,
+                ),
                 bool_type,
             ),
             Op::Geq => (
-                builder.build_int_compare(inkwell::IntPredicate::SGE, load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_compare(
+                    inkwell::IntPredicate::SGE,
+                    load_lhs,
+                    load_rhs,
+                    &tmp_id,
+                ),
                 bool_type,
             ),
             Op::Leq => (
-                builder.build_int_compare(inkwell::IntPredicate::SLE, load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_compare(
+                    inkwell::IntPredicate::SLE,
+                    load_lhs,
+                    load_rhs,
+                    &tmp_id,
+                ),
                 bool_type,
             ),
             Op::Gt => (
-                builder.build_int_compare(inkwell::IntPredicate::SGT, load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_compare(
+                    inkwell::IntPredicate::SGT,
+                    load_lhs,
+                    load_rhs,
+                    &tmp_id,
+                ),
                 bool_type,
             ),
             Op::Lt => (
-                builder.build_int_compare(inkwell::IntPredicate::SLT, load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_compare(
+                    inkwell::IntPredicate::SLT,
+                    load_lhs,
+                    load_rhs,
+                    &tmp_id,
+                ),
                 bool_type,
             ),
             Op::Add => (
-                builder.build_int_add(load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_add(load_lhs, load_rhs, &tmp_id),
                 load_lhs.get_type(),
             ),
             Op::Sub => (
-                builder.build_int_sub(load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_sub(load_lhs, load_rhs, &tmp_id),
                 load_lhs.get_type(),
             ),
             Op::Mul => (
-                builder.build_int_mul(load_lhs, load_rhs, &tmp_id),
+                env.builder.build_int_mul(load_lhs, load_rhs, &tmp_id),
                 load_lhs.get_type(),
             ),
             Op::Div => (
-                builder.build_int_signed_div(load_lhs, load_rhs, &tmp_id),
+                env.builder
+                    .build_int_signed_div(load_lhs, load_rhs, &tmp_id),
                 load_lhs.get_type(),
             ),
             Op::Mod => (
-                builder.build_int_signed_rem(load_lhs, load_rhs, &tmp_id),
+                env.builder
+                    .build_int_signed_rem(load_lhs, load_rhs, &tmp_id),
                 load_lhs.get_type(),
             ),
         };
 
         let tmp_id = env.get_tmp_var_id();
-        let ptr = builder.build_alloca(result_type, &tmp_id);
-        builder.build_store(ptr, tmp);
-        ptr
+        let ptr = env.builder.build_alloca(result_type, &tmp_id);
+        env.builder.build_store(ptr, tmp);
+        Some(ptr)
     }
 }
 
-impl VariableDecl {
-    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
+impl<'ll> CodeGen<'ll, IntValue<'ll>> for VariableDecl<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<IntValue<'ll>> {
         let var_type = match self.ty {
             Type::Int32 => env.ctx.i32_type(),
             Type::Int64 => env.ctx.i64_type(),
@@ -244,9 +147,9 @@ impl VariableDecl {
             _ => panic!("ty: {:?} is unknown", self.ty),
         };
         if let Some(init) = self.init {
-            let init_ptr = init.gen_code(env);
+            let init_ptr = init.code_gen(env).unwrap();
             let tmp_id = env.get_tmp_var_id();
-            let tmp = env.builder.build_load(init_ptr.unwrap(), &tmp_id);
+            let tmp = env.builder.build_load(init_ptr, &tmp_id);
             let ptr: PointerValue = env.builder.build_alloca(var_type, &self.id);
             env.builder.build_store(ptr, tmp.into_int_value());
 
@@ -257,31 +160,32 @@ impl VariableDecl {
             env.builder.build_store(ptr, zero);
             env.set_variable(self.id.clone(), ptr);
         }
+        None
     }
 }
 
-impl Variable {
-    fn gen_code<'a>(self, env: &Env<'a>) -> PointerValue<'a> {
-        env.get_variable(self.id).unwrap().clone()
+impl<'ll> CodeGen<'ll, PointerValue<'ll>> for Variable<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<PointerValue<'ll>> {
+        Some(env.get_variable(self.id).unwrap().clone())
     }
 }
 
-impl Expr {
-    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) -> Option<PointerValue<'ctx>> {
+impl<'ll> CodeGen<'ll, PointerValue<'ll>> for Expr<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<PointerValue<'ll>> {
         match self {
             Expr::Const(cns) => {
-                let tmp = cns.gen_code(env);
+                let tmp = cns.code_gen(env).unwrap();
                 let tmp_id = env.get_tmp_var_id();
                 let ptr = env.builder.build_alloca(tmp.get_type(), &tmp_id);
                 env.builder.build_store(ptr, tmp);
                 Some(ptr)
             }
-            Expr::BinOp(bin_op) => Some(bin_op.gen_code(env)),
-            Expr::Variable(var) => Some(var.gen_code(env)),
+            Expr::BinOp(bin_op) => bin_op.code_gen(env),
+            Expr::Variable(var) => var.code_gen(env),
             Expr::Call(call) => {
                 // always returns value
                 let call_id = call.id.clone();
-                let callsitevalu = call.gen_code(env);
+                let callsitevalu = call.code_gen(env).unwrap();
                 let tmp_id = env.get_tmp_var_id();
                 let f = env.functions.get(&call_id).unwrap();
                 // 関数がvoidを返すならNoneを返す
@@ -307,12 +211,12 @@ impl Expr {
     }
 }
 
-impl Call {
-    fn gen_code<'a>(self, env: &mut Env<'a>) -> CallSiteValue<'a> {
+impl<'ll> CodeGen<'ll, CallSiteValue<'ll>> for Call<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<CallSiteValue<'ll>> {
         // eval exprs
         let mut evaluated_args: Vec<BasicMetadataValueEnum> = vec![];
         for arg in self.args {
-            let evaluated_ptr = arg.gen_code(env).unwrap();
+            let evaluated_ptr = arg.code_gen(env).unwrap();
             let var_id = env.get_tmp_var_id();
             let evaluated = env.builder.build_load(evaluated_ptr, &var_id);
             evaluated_args.push(evaluated.into());
@@ -320,14 +224,14 @@ impl Call {
 
         let function = env.module.get_function(&self.id).unwrap();
         let var_id = env.get_tmp_var_id();
-        env.builder.build_call(function, &evaluated_args, &var_id)
+        Some(env.builder.build_call(function, &evaluated_args, &var_id))
     }
 }
 
-impl IfElse {
-    fn gen_code<'a>(self, env: &mut Env<'a>) {
+impl<'ll> CodeGen<'ll, VoidValue<'ll>> for IfElse<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<VoidValue<'ll>> {
         // generate cond, success, failure block
-        let ptr = self.cond.gen_code(env).unwrap();
+        let ptr = self.cond.code_gen(env).unwrap();
         let var_id = env.get_tmp_var_id();
         let res = env.builder.build_load(ptr, &var_id).into_int_value();
 
@@ -352,23 +256,24 @@ impl IfElse {
 
         env.builder.position_at_end(success_block);
         // then_block is always exists
-        self.success.gen_code(env);
+        self.success.code_gen(env);
         env.builder.build_unconditional_branch(dest_block);
 
         env.builder.position_at_end(failure_block);
         // else
         if let Some(failure) = self.failure {
-            failure.gen_code(env)
+            failure.code_gen(env);
         };
         env.builder.build_unconditional_branch(dest_block);
 
         env.builder.position_at_end(dest_block);
+        None
     }
 }
 
-impl Assign {
-    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
-        let ptr_right = self.right.gen_code(env).unwrap();
+impl<'ll> CodeGen<'ll, VoidValue<'ll>> for Assign<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<IntValue<'ll>> {
+        let ptr_right = self.right.code_gen(env).unwrap();
         let tmp_id = env.get_tmp_var_id();
         if let Some(ptr_left) = env.get_variable(self.left.clone()) {
             env.builder.build_store(
@@ -378,11 +283,12 @@ impl Assign {
         } else {
             panic!("variable {} is not found.", self.left)
         }
+        None
     }
 }
 
-impl For {
-    fn gen_code<'ctx>(self, env: &mut Env<'ctx>) {
+impl<'ll> CodeGen<'ll, VoidValue<'ll>> for For<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<IntValue<'ll>> {
         //   <decl>
         //   jmp cond
         // cond:
@@ -406,12 +312,12 @@ impl For {
         let dest_id = env.get_tmp_label_id();
         let dest_block = env.ctx.append_basic_block(fn_value, &dest_id);
 
-        self.var_decl.gen_code(env);
+        self.var_decl.code_gen(env);
         env.builder.build_unconditional_branch(cond_block);
 
         // generate cond
         env.builder.position_at_end(cond_block);
-        let ptr = self.cond.gen_code(env).unwrap();
+        let ptr = self.cond.code_gen(env).unwrap();
         let var_id = env.get_tmp_var_id();
         let res = env.builder.build_load(ptr, &var_id).into_int_value();
         // cond != 0
@@ -427,32 +333,33 @@ impl For {
 
         // generate do
         env.builder.position_at_end(do_block);
-        self.stmts.gen_code(env);
+        self.stmts.code_gen(env);
 
         // jmp update:
         env.builder.build_unconditional_branch(update_block);
 
         // generate update
         env.builder.position_at_end(update_block);
-        self.assign.gen_code(env);
+        self.assign.code_gen(env);
         env.builder.build_unconditional_branch(cond_block);
 
         // jmp dest:
         env.builder.position_at_end(dest_block);
+        None
     }
 }
 
-impl Stmt {
-    fn gen_code<'a>(self, env: &mut Env<'a>) {
+impl<'ll> CodeGen<'ll, VoidValue<'ll>> for Stmt<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<VoidValue<'ll>> {
         match self {
             Stmt::Expr(expr) => {
-                expr.gen_code(env);
+                Some(expr.code_gen(env));
             }
             Stmt::VariableDecl(decl) => {
-                decl.gen_code(env);
+                Some(decl.code_gen(env));
             }
             Stmt::Return(expr) => {
-                let ptr = expr.gen_code(env);
+                let ptr = expr.code_gen(env);
                 if let Some(pv) = ptr {
                     let tmp_id = env.get_tmp_var_id();
                     let tmp = env.builder.build_load(pv, &tmp_id);
@@ -462,28 +369,30 @@ impl Stmt {
                 }
             }
             Stmt::Assign(assign) => {
-                assign.gen_code(env);
+                Some(assign.code_gen(env));
             }
             Stmt::IfElse(if_else) => {
-                if_else.gen_code(env);
+                Some(if_else.code_gen(env));
             }
             Stmt::For(for_) => {
-                for_.gen_code(env);
+                Some(for_.code_gen(env));
             }
         };
+        None
     }
 }
 
-impl Stmts {
-    fn gen_code<'a>(self, env: &mut Env<'a>) {
+impl<'ll> CodeGen<'ll, VoidValue<'ll>> for Stmts<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<VoidValue<'ll>> {
         for stmt in self.0 {
-            stmt.gen_code(env);
+            stmt.code_gen(env);
         }
+        None
     }
 }
 
-impl FunctionDecl {
-    fn gen_code(self, env: &mut Env) {
+impl<'ll> CodeGen<'ll, IntValue<'ll>> for FunctionDecl<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<IntValue<'ll>> {
         let llvm_ret_typ = env.get_llvm_fn_type(self.ret_typ.clone());
 
         let fn_type: FunctionType = if let Some(llvm_ret_type) = llvm_ret_typ {
@@ -511,6 +420,7 @@ impl FunctionDecl {
         // 現在の関数の情報を設定
         env.function_value = Some(fn_value.clone());
         env.function = self.id.clone();
+        dbg!(&env.functions);
         if env.functions.insert(self.id.clone(), fn_value).is_some() {
             panic!("function {} is already decleared", &self.id);
         }
@@ -533,7 +443,7 @@ impl FunctionDecl {
             env.set_variable(arg.id.clone(), ptr_param);
         }
 
-        self.stmts.gen_code(env);
+        self.stmts.code_gen(env);
 
         // returnがないときも0をかえすようにしている
         if llvm_ret_typ.is_none() {
@@ -542,13 +452,15 @@ impl FunctionDecl {
 
         env.function_value = None;
         env.function = "".to_owned();
+        None
     }
 }
 
-impl Program {
-    fn gen_code<'a>(self, env: &mut Env<'a>) {
+impl<'ll> CodeGen<'ll, IntValue<'ll>> for Program<'ll> {
+    fn code_gen(self, env: &mut Env<'ll>) -> Option<IntValue<'ll>> {
         for function in self.0 {
-            function.gen_code(env);
+            function.code_gen(env);
         }
+        None
     }
 }

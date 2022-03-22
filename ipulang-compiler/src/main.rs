@@ -1,16 +1,10 @@
 use std::fs;
 
-use anyhow::{Error, Result};
+use anyhow::Error;
 use clap::Parser;
-mod ast;
-mod codegen;
-mod nodes;
-mod type_check;
-mod types;
-
-use ast::program_parser;
-use codegen::code_gen;
-use type_check::type_check;
+use ipulang_codegen::codegen::code_gen;
+use ipulang_parser::{ast::program_parser, nodes::Span};
+use ipulang_typecheck::type_check::type_check;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -27,8 +21,10 @@ struct Args {
 }
 
 pub fn compile(code: String) -> Result<String, Box<Error>> {
-    let ast = program_parser(&code);
+    let code = Span::new(code.as_str());
+    let ast = program_parser(code);
     let ast = type_check(ast)?;
+    dbg!(&ast);
     let ir = code_gen(ast)?;
     Ok(ir)
 }

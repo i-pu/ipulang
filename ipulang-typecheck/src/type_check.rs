@@ -1,9 +1,13 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, bail, ensure, Result};
-
-use crate::nodes::*;
-use crate::types::*;
+use ipulang_parser::{
+    nodes::{
+        Assign, BinOp, Call, Const, Expr, For, FunctionDecl, IfElse, Op, Program, Stmt, Stmts,
+        Variable, VariableDecl,
+    },
+    types::Type,
+};
 
 struct Env {
     /// 変数の情報
@@ -65,7 +69,11 @@ pub fn type_check(mut program: Program) -> Result<Program> {
     Ok(program)
 }
 
-impl Const {
+trait TypeCheck {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type>;
+}
+
+impl TypeCheck for Const {
     fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         match self {
             Const::I32Const(_) => Ok(Type::Int32),
@@ -76,7 +84,7 @@ impl Const {
     }
 }
 
-impl BinOp {
+impl<'a> TypeCheck for BinOp<'a> {
     fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         let left_typ = self.left.type_check(env)?;
         let right_typ = self.right.type_check(env)?;
@@ -101,7 +109,7 @@ impl BinOp {
     }
 }
 
-impl Variable {
+impl<'a> TypeCheck for Variable<'a> {
     fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         if let Some(typ) = env.get_var_type(&self.id) {
             Ok(typ)
@@ -111,7 +119,7 @@ impl Variable {
     }
 }
 
-impl Call {
+impl<'a> TypeCheck for Call<'a> {
     fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         let func_name = self.id.clone();
         if let Some(func_type) = env.functions.get(&func_name).map(|a| a.clone()) {
@@ -138,7 +146,7 @@ impl Call {
     }
 }
 
-impl Expr {
+impl<'a> TypeCheck for Expr<'a> {
     fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         match self {
             Expr::Const(c) => c.type_check(env),
@@ -149,8 +157,8 @@ impl Expr {
     }
 }
 
-impl IfElse {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for IfElse<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         let cond_typ = self.cond.type_check(env)?;
         self.success.type_check(env)?;
         self.failure.as_mut().map(|ref mut f| f.type_check(env));
@@ -162,12 +170,12 @@ impl IfElse {
             cond_typ,
             Type::Bool,
         );
-        Ok(())
+        Ok(Type::Unit)
     }
 }
 
-impl Assign {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for Assign<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         // TODO: 型推論
         if let Some(var_typ) = env.get_var_type(&self.left) {
             let right_typ = self.right.type_check(env)?;
@@ -181,22 +189,22 @@ impl Assign {
         } else {
             bail!("var {} is not found", &self.left);
         }
-        Ok(())
+        Ok(Type::Unit)
     }
 }
 
-impl For {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for For<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         self.var_decl.type_check(env)?;
         self.cond.type_check(env)?;
         self.assign.type_check(env)?;
         self.stmts.type_check(env)?;
-        Ok(())
+        Ok(Type::Unit)
     }
 }
 
-impl VariableDecl {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for VariableDecl<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         if let Some(init) = self.init.as_mut() {
             let init_ty = init.type_check(env)?;
             ensure!(
@@ -207,12 +215,12 @@ impl VariableDecl {
             );
         }
         env.set_var_type(self.id.clone(), self.ty.clone());
-        Ok(())
+        Ok(Type::Unit)
     }
 }
 
-impl Stmt {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for Stmt<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         match self {
             Stmt::Expr(expr) => {
                 expr.type_check(env)?;
@@ -230,8 +238,12 @@ impl Stmt {
                     bail!("return is out of scope function");
                 }
             }
-            Stmt::VariableDecl(vd) => vd.type_check(env)?,
-            Stmt::Assign(assign) => assign.type_check(env)?,
+            Stmt::VariableDecl(vd) => {
+                vd.type_check(env)?;
+            }
+            Stmt::Assign(assign) => {
+                assign.type_check(env)?;
+            }
             Stmt::IfElse(if_else) => {
                 if_else.type_check(env)?;
             }
@@ -239,21 +251,21 @@ impl Stmt {
                 f.type_check(env)?;
             }
         }
-        Ok(())
+        Ok(Type::Unit)
     }
 }
 
-impl Stmts {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for Stmts<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         for stmt in self.0.iter_mut() {
             stmt.type_check(env)?;
         }
-        Ok(())
+        Ok(Type::Unit)
     }
 }
 
-impl FunctionDecl {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for FunctionDecl<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         env.function_id = Some(self.id.clone());
         if env
             .functions
@@ -278,15 +290,15 @@ impl FunctionDecl {
 
         env.function_id = None;
 
-        Ok(())
+        Ok(Type::Unit)
     }
 }
 
-impl Program {
-    fn type_check(&mut self, env: &mut Env) -> Result<()> {
+impl<'a> TypeCheck for Program<'a> {
+    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         for function in self.0.iter_mut() {
             function.type_check(env)?;
         }
-        Ok(())
+        Ok(Type::Unit)
     }
 }

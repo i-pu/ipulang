@@ -3,11 +3,15 @@ name = "ipulang-compiler"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = [ "tinyvm" ]
+llvm = ["dep:ipulang-codegen-llvm"]
+tinyvm = ["dep:ipulang-codegen-tinyvm"]
 
 [dependencies]
 anyhow = "1"
-clap = { version = "3.0.0-rc.8", features = ["derive"] }
+clap = { version = "4.2.1", features = ["derive"] }
 ipulang-parser = { path = "../ipulang-parser" }
 ipulang-typecheck = { path = "../ipulang-typecheck" }
-ipulang-codegen = { path = "../ipulang-codegen" }
+ipulang-codegen-llvm = { path = "../ipulang-codegen-llvm", optional = true }
+ipulang-codegen-tinyvm = { path = "../ipulang-codegen-tinyvm", optional = true }

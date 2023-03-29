@@ -2,7 +2,8 @@ use std::fs;
 
 use anyhow::Error;
 use clap::Parser;
-use ipulang_codegen::codegen::code_gen;
+use ipulang_codegen_tinyvm::code_gen;
+// use ipulang_codegen_llvm::codegen::code_gen;
 use ipulang_parser::{ast::program_parser, nodes::Span};
 use ipulang_typecheck::type_check::type_check;
 
@@ -31,10 +32,7 @@ pub fn compile(code: String) -> Result<String, Box<Error>> {
 
 fn main() {
     let args = Args::parse();
-
     let code = fs::read_to_string(&args.file).unwrap();
     let ir = compile(code).unwrap();
-
-    // let bin = ast.gen_code();
     fs::write(&args.output, ir).unwrap();
 }

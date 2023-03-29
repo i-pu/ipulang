@@ -1,0 +1,8 @@
+[package]
+name = "ipulang-codegen-tinyvm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+ipulang-parser = { path = "../ipulang-parser" }

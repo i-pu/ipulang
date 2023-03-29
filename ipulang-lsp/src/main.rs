@@ -12,22 +12,23 @@ impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let mut result = InitializeResult::default();
         result.capabilities.text_document_sync =
-            Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::Full));
+            Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL));
         result.capabilities.completion_provider = Some(CompletionOptions {
             resolve_provider: Some(false),
             trigger_characters: None,
             work_done_progress_options: Default::default(),
             all_commit_characters: None,
+            ..Default::default()
         });
         Ok(result)
     }
 
     async fn initialized(&self, params: InitializedParams) {
         self.client
-            .log_message(MessageType::Info, format!("{:?}", &params))
+            .log_message(MessageType::INFO, format!("{:?}", &params))
             .await;
         self.client
-            .log_message(MessageType::Info, "server initialized!")
+            .log_message(MessageType::INFO, "server initialized!")
             .await;
     }
 
@@ -37,19 +38,19 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         self.client
-            .log_message(MessageType::Info, format!("{:?}", &params))
+            .log_message(MessageType::INFO, format!("{:?}", &params))
             .await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         self.client
-            .log_message(MessageType::Info, format!("{:?}", &params))
+            .log_message(MessageType::INFO, format!("{:?}", &params))
             .await;
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         self.client
-            .log_message(MessageType::Info, format!("{:?}", &params))
+            .log_message(MessageType::INFO, format!("{:?}", &params))
             .await;
 
         Ok(Some(CompletionResponse::Array(vec![
@@ -68,19 +69,14 @@ impl LanguageServer for Backend {
 
 #[tokio::main]
 async fn main() {
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
+    let read = tokio::io::stdin();
+    let write = tokio::io::stdout();
 
-    let (service, messages) = LspService::new(|client| Backend { client });
-
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:12345")
-        .await
-        .unwrap();
-    let (stream, _) = listener.accept().await.unwrap();
-    let (read, write) = tokio::io::split(stream);
-    // Server::new(stdin, stdout)
-    Server::new(read, write)
-        .interleave(messages)
-        .serve(service)
-        .await;
+    // let listener = tokio::net::TcpListener::bind("0.0.0.0:12345")
+    //     .await
+    //     .unwrap();
+    // let (stream, _) = listener.accept().await.unwrap();
+    // let (read, write) = tokio::io::split(stream);
+    let (service, socket) = LspService::new(|client| Backend { client });
+    Server::new(read, write, socket).serve(service).await;
 }

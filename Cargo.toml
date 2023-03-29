@@ -2,7 +2,9 @@
 members = [
     "ipulang-parser",
     "ipulang-typecheck",
-    "ipulang-codegen",
     "ipulang-lsp",
     "ipulang-compiler"
+]
+exclude = [
+    "ipulang-codegen-llvm"
 ]

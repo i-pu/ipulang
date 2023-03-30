@@ -1,8 +1,7 @@
-use std::fs;
-
-use anyhow::Error;
+use anyhow::Result;
 use clap::Parser;
-use ipulang_codegen_tinyvm::code_gen;
+use ipulang_codegen_tinyvm::{code_gen, execute};
+use std::fs;
 // use ipulang_codegen_llvm::codegen::code_gen;
 use ipulang_parser::{ast::program_parser, nodes::Span};
 use ipulang_typecheck::type_check::type_check;
@@ -21,7 +20,7 @@ struct Args {
     count: u8,
 }
 
-pub fn compile(code: String) -> Result<String, Box<Error>> {
+pub fn compile(code: String) -> Result<Vec<u8>> {
     let code = Span::new(code.as_str());
     let ast = program_parser(code);
     let ast = type_check(ast)?;
@@ -34,5 +33,7 @@ fn main() {
     let args = Args::parse();
     let code = fs::read_to_string(&args.file).unwrap();
     let ir = compile(code).unwrap();
-    fs::write(&args.output, ir).unwrap();
+    fs::write(&args.output, ir.clone()).unwrap();
+
+    execute(&mut ir.as_slice());
 }

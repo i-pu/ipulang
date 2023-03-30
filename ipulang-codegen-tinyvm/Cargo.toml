@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 anyhow = "1"
 ipulang-parser = { path = "../ipulang-parser" }
+stack-vm = "1.0.1"
+rmp = "0.8.11"

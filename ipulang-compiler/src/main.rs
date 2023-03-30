@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use ipulang_codegen_tinyvm::{code_gen, execute};
+use ipulang_codegen_vm::{code_gen, execute};
 use std::fs;
 // use ipulang_codegen_llvm::codegen::code_gen;
 use ipulang_parser::{ast::program_parser, nodes::Span};

@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = [ "tinyvm" ]
+default = [ "vm" ]
 llvm = ["dep:ipulang-codegen-llvm"]
-tinyvm = ["dep:ipulang-codegen-tinyvm"]
+vm = ["dep:ipulang-codegen-vm"]
 
 [dependencies]
 anyhow = "1"
@@ -14,4 +14,4 @@ clap = { version = "4.2.1", features = ["derive"] }
 ipulang-parser = { path = "../ipulang-parser" }
 ipulang-typecheck = { path = "../ipulang-typecheck" }
 ipulang-codegen-llvm = { path = "../ipulang-codegen-llvm", optional = true }
-ipulang-codegen-tinyvm = { path = "../ipulang-codegen-tinyvm", optional = true }
+ipulang-codegen-vm = { path = "../ipulang-codegen-vm", optional = true }

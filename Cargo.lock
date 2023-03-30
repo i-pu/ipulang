@@ -397,7 +397,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ipulang-codegen-tinyvm"
+name = "ipulang-codegen-vm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -413,7 +413,7 @@ dependencies = [
  "anyhow",
  "clap",
  "ipulang-codegen-llvm",
- "ipulang-codegen-tinyvm",
+ "ipulang-codegen-vm",
  "ipulang-parser",
  "ipulang-typecheck",
 ]

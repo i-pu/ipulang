@@ -1,8 +1,10 @@
 use anyhow::Result;
+use codegen::Ctx;
 use instructions::register_instructions;
 use ipulang_parser::nodes::Program;
 use operand::Operand;
 use stack_vm::{Builder, Code, FromByteCode, Machine, ToByteCode, WriteManyTable, WriteOnceTable};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 
@@ -14,6 +16,14 @@ pub(crate) mod operand;
 
 pub fn code_gen(ast: Program) -> Result<Vec<u8>> {
     let instruction_table = register_instructions();
+    let mut ctx = Ctx {
+        functions: HashMap::from_iter(
+            ast.0
+                .iter()
+                .map(|fun| (fun.id.clone(), fun.clone()))
+                .collect::<Vec<_>>(),
+        ),
+    };
     let mut builder: Builder<Operand> = Builder {
         instruction_table: &instruction_table,
         instructions: vec![],
@@ -22,7 +32,7 @@ pub fn code_gen(ast: Program) -> Result<Vec<u8>> {
     };
     for func in ast.0.iter() {
         dbg!(&func);
-        func.code_gen(&mut builder);
+        func.code_gen(&mut ctx, &mut builder);
     }
 
     let code: Code<Operand> = builder.into();

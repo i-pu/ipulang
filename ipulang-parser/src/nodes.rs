@@ -45,7 +45,7 @@ impl Const {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq, Eq)]
+#[derivative(Debug, Clone, PartialEq, Eq)]
 pub struct BinOp<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,
@@ -68,7 +68,7 @@ impl<'a> BinOp<'a> {
 }
 
 /// 式
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr<'a> {
     Const(Const),
     Variable(Variable<'a>),
@@ -77,7 +77,7 @@ pub enum Expr<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct VariableDecl<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,
@@ -98,7 +98,7 @@ impl<'a> VariableDecl<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Variable<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,
@@ -111,7 +111,7 @@ impl<'a> Variable<'a> {
         Variable { position, id, ty }
     }
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Stmts<'a>(pub Vec<Stmt<'a>>);
 
 impl<'a> Stmts<'a> {
@@ -121,7 +121,7 @@ impl<'a> Stmts<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct FunctionDecl<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,
@@ -150,7 +150,7 @@ impl<'a> FunctionDecl<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Call<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,
@@ -165,7 +165,7 @@ impl<'a> Call<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct IfElse<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,
@@ -191,7 +191,7 @@ impl<'a> IfElse<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct For<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,
@@ -219,7 +219,7 @@ impl<'a> For<'a> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt<'a> {
     Expr(Expr<'a>),
     Return(Expr<'a>),
@@ -239,7 +239,7 @@ impl<'a> Program<'a> {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug, PartialEq)]
+#[derivative(Debug, Clone, PartialEq)]
 pub struct Assign<'a> {
     #[derivative(PartialEq = "ignore")]
     pub position: Span<'a>,

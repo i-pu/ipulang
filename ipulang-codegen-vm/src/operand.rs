@@ -1,6 +1,5 @@
-use std::io::{Read, Write};
-
 use stack_vm::{FromByteCode, ToByteCode};
+use std::io::{Read, Write};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand {

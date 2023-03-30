@@ -2,9 +2,10 @@ fn main(): i32 {
     if (0_bool) {
         return 1 * 2;
     } else {
-        if (0_bool) {
-        return 3;
-        } else {return 4;}
+        if (1_bool) {} 
+        else {
+            return 4;
+        }
     }
     return 0;
 }

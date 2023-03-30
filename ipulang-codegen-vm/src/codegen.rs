@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::operand::Operand;
-use ipulang_parser::nodes::{Const, Expr, FunctionDecl, Stmt};
+use ipulang_parser::nodes::{Const, Expr, FunctionDecl, Stmt, Stmts};
 use stack_vm::Builder;
 
 pub(crate) trait Codegen {
@@ -15,7 +15,13 @@ pub struct Ctx<'a> {
 impl Codegen for FunctionDecl<'_> {
     fn code_gen(&self, ctx: &mut Ctx<'_>, builder: &mut Builder<Operand>) {
         builder.label(self.id.as_str());
-        for stmt in self.stmts.0.iter() {
+        self.stmts.code_gen(ctx, builder);
+    }
+}
+
+impl Codegen for Stmts<'_> {
+    fn code_gen(&self, ctx: &mut Ctx<'_>, builder: &mut Builder<Operand>) {
+        for stmt in self.0.iter() {
             stmt.code_gen(ctx, builder);
         }
     }
@@ -38,7 +44,33 @@ impl Codegen for Stmt<'_> {
                 builder.push("store", vec![Operand::Label(decl.id.clone())]);
             }
             Stmt::Assign(_) => todo!(),
-            Stmt::IfElse(_) => todo!(),
+            Stmt::IfElse(ifelse) => {
+                // <cond>
+                // jump_if_zero .failure (has else-branch) .end (otherwise)
+                // <success>
+                // jump .end
+                // .failure
+                // <failure>
+                // .end
+                // ...
+                ifelse.cond.code_gen(ctx, builder);
+
+                let i = builder.labels.keys().len();
+                let failure_label = format!("failure_{}", i);
+                let end_label = format!("fi_{}", i);
+                if ifelse.failure.is_some() {
+                    builder.push("jump_if_zero", vec![Operand::Label(failure_label.clone())]);
+                } else {
+                    builder.push("jump_if_zero", vec![Operand::Label(end_label.clone())]);
+                }
+                ifelse.success.code_gen(ctx, builder);
+                builder.push("jump", vec![Operand::Label(end_label.clone())]);
+                if let Some(failure) = ifelse.failure.as_ref() {
+                    builder.label(&failure_label);
+                    failure.code_gen(ctx, builder);
+                }
+                builder.label(&end_label);
+            }
             Stmt::For(_) => todo!(),
         }
     }
@@ -55,14 +87,30 @@ impl Codegen for Expr<'_> {
                 binop.left.code_gen(ctx, builder);
                 binop.right.code_gen(ctx, builder);
                 match binop.op {
-                    ipulang_parser::nodes::Op::Or => todo!(),
-                    ipulang_parser::nodes::Op::And => todo!(),
-                    ipulang_parser::nodes::Op::Eq => todo!(),
-                    ipulang_parser::nodes::Op::Neq => todo!(),
-                    ipulang_parser::nodes::Op::Geq => todo!(),
-                    ipulang_parser::nodes::Op::Leq => todo!(),
-                    ipulang_parser::nodes::Op::Gt => todo!(),
-                    ipulang_parser::nodes::Op::Lt => todo!(),
+                    ipulang_parser::nodes::Op::Or => {
+                        builder.push("or", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::And => {
+                        builder.push("and", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Eq => {
+                        builder.push("eq", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Neq => {
+                        builder.push("neq", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Geq => {
+                        builder.push("geq", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Leq => {
+                        builder.push("leq", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Gt => {
+                        builder.push("gt", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Lt => {
+                        builder.push("lt", vec![]);
+                    }
                     ipulang_parser::nodes::Op::Add => {
                         builder.push("add", vec![]);
                     }
@@ -75,7 +123,9 @@ impl Codegen for Expr<'_> {
                     ipulang_parser::nodes::Op::Div => {
                         builder.push("div", vec![]);
                     }
-                    ipulang_parser::nodes::Op::Mod => todo!(),
+                    ipulang_parser::nodes::Op::Mod => {
+                        builder.push("mod", vec![]);
+                    }
                 }
             }
             Expr::Call(call) => {

@@ -1,0 +1,7 @@
+
+fn main(): i32 {
+    if (0_bool) {
+        return 3;
+    }
+    return 5;
+}

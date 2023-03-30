@@ -1,7 +1,7 @@
 use anyhow::Result;
 use codegen::Ctx;
 use instructions::register_instructions;
-use ipulang_parser::nodes::{FunctionDecl, Program};
+use ipulang_parser::nodes::{Program};
 use operand::Operand;
 use stack_vm::{Builder, Code, FromByteCode, Machine, ToByteCode, WriteManyTable, WriteOnceTable};
 use std::collections::HashMap;

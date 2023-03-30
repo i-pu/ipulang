@@ -31,7 +31,7 @@ impl Env {
         Self {
             variables: HashMap::new(),
             function_id: None,
-            functions: functions,
+            functions,
         }
     }
 
@@ -39,9 +39,7 @@ impl Env {
     fn get_var_type(&mut self, var_name: &str) -> Option<Type> {
         self.function_id
             .clone()
-            .map(|id| self.variables.get(&id).map(|m| m.get(var_name)).flatten())
-            .flatten()
-            .map(|ty| *ty)
+            .and_then(|id| self.variables.get(&id).and_then(|m| m.get(var_name))).copied()
     }
 
     /// 変数に型情報を設定する
@@ -56,11 +54,10 @@ impl Env {
     fn get_current_fn_type(&self) -> Option<(Vec<Type>, Type)> {
         self.function_id
             .clone()
-            .map(|a| self.get_fn_type(&a))
-            .flatten()
+            .and_then(|a| self.get_fn_type(&a))
     }
     fn get_fn_type(&self, fn_name: &String) -> Option<(Vec<Type>, Type)> {
-        self.functions.get(fn_name).map(|ty| ty.clone())
+        self.functions.get(fn_name).cloned()
     }
 }
 
@@ -75,7 +72,7 @@ trait TypeCheck {
 }
 
 impl TypeCheck for Const {
-    fn type_check(&mut self, env: &mut Env) -> Result<Type> {
+    fn type_check(&mut self, _env: &mut Env) -> Result<Type> {
         match self {
             Const::Unit => Ok(Type::Unit),
             Const::I32Const(_) => Ok(Type::Int32),
@@ -124,7 +121,7 @@ impl<'a> TypeCheck for Variable<'a> {
 impl<'a> TypeCheck for Call<'a> {
     fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         let func_name = self.id.clone();
-        if let Some(func_type) = env.functions.get(&func_name).map(|a| a.clone()) {
+        if let Some(func_type) = env.functions.get(&func_name).cloned() {
             // 引数の数をチェック
             ensure!(
                 func_type.0.len() == self.args.len(),
@@ -216,7 +213,7 @@ impl<'a> TypeCheck for VariableDecl<'a> {
                 init_ty
             );
         }
-        env.set_var_type(self.id.clone(), self.ty.clone());
+        env.set_var_type(self.id.clone(), self.ty);
         Ok(Type::Unit)
     }
 }
@@ -274,7 +271,7 @@ impl<'a> TypeCheck for FunctionDecl<'a> {
             .insert(
                 self.id.clone(),
                 (
-                    self.args.iter().map(|arg| arg.ty.clone()).collect(),
+                    self.args.iter().map(|arg| arg.ty).collect(),
                     self.ret_typ,
                 ),
             )

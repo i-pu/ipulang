@@ -13,7 +13,7 @@ fn load(machine: &mut Machine<Operand>, args: &[usize]) {
     let name = machine.get_data(args[0]).label();
     let operand = machine
         .get_local_deep(name.as_str())
-        .expect(format!("{} not found", name).as_str());
+        .unwrap_or_else(|| panic!("{} not found", name));
     machine.operand_push(operand.clone());
 }
 

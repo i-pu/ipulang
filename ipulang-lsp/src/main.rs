@@ -9,7 +9,7 @@ struct Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, _params: InitializeParams) -> Result<InitializeResult> {
         let mut result = InitializeResult::default();
         result.capabilities.text_document_sync =
             Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL));

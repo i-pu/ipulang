@@ -169,7 +169,7 @@ impl Codegen for Expr<'_> {
                     let func = ctx
                         .functions
                         .get(&call.id)
-                        .expect(format!("function {} not found", call.id).as_str());
+                        .unwrap_or_else(|| panic!("function {} not found", call.id));
                     let params = func.args.clone();
                     for arg in call.args.iter() {
                         arg.code_gen(ctx, builder);
@@ -185,7 +185,7 @@ impl Codegen for Expr<'_> {
 }
 
 impl Codegen for Const {
-    fn code_gen(&self, ctx: &mut Ctx, builder: &mut Builder<Operand>) {
+    fn code_gen(&self, _ctx: &mut Ctx, builder: &mut Builder<Operand>) {
         match self {
             Const::I32Const(i) => builder.push("push", vec![Operand::ImmI64(*i as i64)]),
             Const::I64Const(i) => builder.push("push", vec![Operand::ImmI64(*i)]),

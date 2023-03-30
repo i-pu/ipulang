@@ -35,7 +35,7 @@ fn string_parser(s: Span) -> IResult<Span, String> {
 /// "64_hoge" -> hoge, <64>
 pub fn const_parser(s: Span) -> IResult<Span, Const> {
     alt((
-        map(string_parser, |s| Const::String(s)),
+        map(string_parser, Const::String),
         map(
             tuple((digit1, char('_'), type_parser)),
             |(n, _, t)| match t {
@@ -113,10 +113,10 @@ pub fn factor_parser(s: Span) -> IResult<Span, Expr> {
     delimited(
         multispace0,
         alt((
-            map(const_parser, |c| Expr::Const(c)),
+            map(const_parser, Expr::Const),
             paren_expr_parser,
-            map(call_parser, |call| Expr::Call(call)),
-            map(var_parser, |var| Expr::Variable(var)),
+            map(call_parser, Expr::Call),
+            map(var_parser, Expr::Variable),
         )),
         multispace0,
     )(s)
@@ -184,7 +184,7 @@ pub fn relational_op_parser(s: Span) -> IResult<Span, Op> {
         alt((tag(">="), tag("<="), tag(">"), tag("<"))),
         multispace0,
     )(s)?;
-    let (s, pos) = position(s)?;
+    let (s, _pos) = position(s)?;
     let op = match *c.fragment() {
         ">=" => Op::Geq,
         "<=" => Op::Leq,
@@ -215,7 +215,7 @@ pub fn releational_expr_parser(s: Span) -> IResult<Span, Expr> {
 /// `==`, `!=`
 pub fn equality_op_parser(s: Span) -> IResult<Span, Op> {
     let (s, c) = delimited(multispace0, alt((tag("=="), tag("!="))), multispace0)(s)?;
-    let (s, pos) = position(s)?;
+    let (s, _pos) = position(s)?;
     let op = match *c.fragment() {
         "==" => Op::Eq,
         "!=" => Op::Neq,
@@ -362,11 +362,11 @@ pub fn stmt_parser(s: Span) -> IResult<Span, Stmt> {
     delimited(
         multispace0,
         alt((
-            map(var_decl_parser, |v| Stmt::VariableDecl(v)),
-            map(return_parser, |r| Stmt::Return(r)),
-            map(assign_parser, |a| Stmt::Assign(a)),
-            map(if_else_parser, |i| Stmt::IfElse(i)),
-            map(for_parser, |i| Stmt::For(i)),
+            map(var_decl_parser, Stmt::VariableDecl),
+            map(return_parser, Stmt::Return),
+            map(assign_parser, Stmt::Assign),
+            map(if_else_parser, Stmt::IfElse),
+            map(for_parser, Stmt::For),
             map(
                 tuple((or_expr_parser, multispace0, char(';'))),
                 |(expr, _, _)| Stmt::Expr(expr),
@@ -454,7 +454,7 @@ mod tests {
             res.fragment().to_string(),
             "",
             "\n=== code: {} ===\n",
-            code.fragment().to_string()
+            code.fragment()
         );
     }
 
@@ -727,7 +727,7 @@ mod tests {
             ))))]),
         ];
 
-        for (code, expr) in codes.into_iter().zip(exprs.into_iter()) {
+        for (code, _expr) in codes.into_iter().zip(exprs.into_iter()) {
             let (res, _) = stmts_parser(code).unwrap();
             check_consumed(code, res);
         }
@@ -758,7 +758,7 @@ mod tests {
     fn test_fn1() {
         let IDK = Span::new("");
         let code = Span::new("fn main( ): unit { }");
-        let expect = FunctionDecl::new(
+        let _expect = FunctionDecl::new(
             IDK,
             "main".to_owned(),
             vec![],
@@ -773,7 +773,7 @@ mod tests {
     fn test_fn2() {
         let IDK = Span::new("");
         let code = Span::new("fn  h0Ge() : unit { 1 ; }");
-        let expect = FunctionDecl::new(
+        let _expect = FunctionDecl::new(
             IDK,
             "h0Ge".to_owned(),
             vec![],

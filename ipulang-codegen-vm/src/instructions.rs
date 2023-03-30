@@ -11,7 +11,6 @@ fn store(machine: &mut Machine<Operand>, args: &[usize]) {
 /// load by name to stack top
 fn load(machine: &mut Machine<Operand>, args: &[usize]) {
     let name = machine.get_data(args[0]).label();
-    dbg!(&machine.call_stack);
     let operand = machine
         .get_local_deep(name.as_str())
         .expect(format!("{} not found", name).as_str());
@@ -24,81 +23,81 @@ fn push(machine: &mut Machine<Operand>, args: &[usize]) {
 }
 
 fn add(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm(lhs + rhs));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64(lhs + rhs));
 }
 
 fn sub(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm(lhs - rhs));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64(lhs - rhs));
 }
 
 fn mul(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm(lhs * rhs));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64(lhs * rhs));
 }
 
 fn div(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm(lhs / rhs));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64(lhs / rhs));
 }
 
 fn modulo(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm(lhs % rhs));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64(lhs % rhs));
 }
 
 fn lt(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs < rhs) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs < rhs) as i64));
 }
 
 fn leq(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs <= rhs) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs <= rhs) as i64));
 }
 
 fn gt(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs > rhs) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs > rhs) as i64));
 }
 
 fn geq(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs >= rhs) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs >= rhs) as i64));
 }
 
 fn eq(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs == rhs) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs == rhs) as i64));
 }
 
 fn neq(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs != rhs) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs != rhs) as i64));
 }
 
 fn or(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs != 0 || rhs != 0) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs != 0 || rhs != 0) as i64));
 }
 
 fn and(machine: &mut Machine<Operand>, _args: &[usize]) {
-    let rhs = machine.operand_pop().imm();
-    let lhs = machine.operand_pop().imm();
-    machine.operand_push(Operand::Imm((lhs != 0 && rhs != 0) as i64));
+    let rhs = machine.operand_pop().i64();
+    let lhs = machine.operand_pop().i64();
+    machine.operand_push(Operand::ImmI64((lhs != 0 && rhs != 0) as i64));
 }
 
 fn ret(machine: &mut Machine<Operand>, _args: &[usize]) {
@@ -117,15 +116,18 @@ fn jump(machine: &mut Machine<Operand>, args: &[usize]) {
 
 fn jump_if_zero(machine: &mut Machine<Operand>, args: &[usize]) {
     let label = machine.get_data(args[0]).label();
-    let value = machine.operand_pop().imm();
+    let value = machine.operand_pop().i64();
     if value == 0 {
         machine.jump(label.as_str());
     }
 }
 
-fn puts(machine: &mut Machine<Operand>, args: &[usize]) {
-    let v = machine.get_data(args[0]).clone();
-    println!("{:?}", v);
+fn puts(machine: &mut Machine<Operand>, _args: &[usize]) {
+    match machine.operand_stack.peek() {
+        Operand::ImmI64(i) => print!("{}", i),
+        Operand::ImmString(s) => print!("{}", s.replace("\\n", "\n")),
+        Operand::Label(l) => print!(".{}", l),
+    }
 }
 
 fn inspect(machine: &mut Machine<Operand>, _args: &[usize]) {
@@ -143,7 +145,7 @@ pub fn register_instructions() -> InstructionTable<Operand> {
     instruction_table.insert(Instruction::new(5, "store", 1, store));
     instruction_table.insert(Instruction::new(6, "load", 1, load));
     instruction_table.insert(Instruction::new(7, "ret", 0, ret));
-    instruction_table.insert(Instruction::new(8, "puts", 1, puts));
+    instruction_table.insert(Instruction::new(8, "puts", 0, puts));
     instruction_table.insert(Instruction::new(9, "call", 1, call));
     instruction_table.insert(Instruction::new(10, "jump", 1, jump));
     instruction_table.insert(Instruction::new(11, "jump_if_zero", 1, jump_if_zero));

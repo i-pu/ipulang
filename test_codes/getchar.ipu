@@ -1,6 +1,0 @@
-
-fn main (): i32 {
-    var a: i32 = getchar();
-    putchar(a);
-    return 0;
-}

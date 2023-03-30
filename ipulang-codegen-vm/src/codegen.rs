@@ -32,7 +32,7 @@ impl Codegen for VariableDecl<'_> {
         if let Some(init) = self.init.as_ref() {
             init.code_gen(ctx, builder);
         } else {
-            builder.push("push", vec![Operand::Imm(0)]);
+            builder.push("push", vec![Operand::ImmI64(0)]);
         };
         builder.push("store", vec![Operand::Label(self.id.clone())]);
     }
@@ -161,19 +161,24 @@ impl Codegen for Expr<'_> {
                 }
             }
             Expr::Call(call) => {
-                let func = ctx
-                    .functions
-                    .get(&call.id)
-                    .expect(format!("function {} not found", call.id).as_str());
-                let params = func.args.clone();
-                for arg in call.args.iter() {
-                    arg.code_gen(ctx, builder);
+                if call.id == "printstr" || call.id == "printi64" || call.id == "printi32" {
+                    println!("{:?}", call.args[0]);
+                    call.args[0].code_gen(ctx, builder);
+                    builder.push("puts", vec![]);
+                } else {
+                    let func = ctx
+                        .functions
+                        .get(&call.id)
+                        .expect(format!("function {} not found", call.id).as_str());
+                    let params = func.args.clone();
+                    for arg in call.args.iter() {
+                        arg.code_gen(ctx, builder);
+                    }
+                    for param in params.iter() {
+                        builder.push("store", vec![Operand::Label(param.id.clone())]);
+                    }
+                    builder.push("call", vec![Operand::Label(call.id.clone())]);
                 }
-                for param in params.iter() {
-                    builder.push("store", vec![Operand::Label(param.id.clone())]);
-                }
-                builder.push("call", vec![Operand::Label(call.id.clone())]);
-                builder.push("inspect", vec![]);
             }
         }
     }
@@ -182,9 +187,11 @@ impl Codegen for Expr<'_> {
 impl Codegen for Const {
     fn code_gen(&self, ctx: &mut Ctx, builder: &mut Builder<Operand>) {
         match self {
-            Const::I32Const(i) => builder.push("push", vec![Operand::Imm(*i as i64)]),
-            Const::I64Const(i) => builder.push("push", vec![Operand::Imm(*i)]),
-            Const::BoolConst(b) => builder.push("push", vec![Operand::Imm(*b as i64)]),
+            Const::I32Const(i) => builder.push("push", vec![Operand::ImmI64(*i as i64)]),
+            Const::I64Const(i) => builder.push("push", vec![Operand::ImmI64(*i)]),
+            Const::BoolConst(b) => builder.push("push", vec![Operand::ImmI64(*b as i64)]),
+            Const::String(s) => builder.push("push", vec![Operand::ImmString(s.to_string())]),
+            _ => {}
         }
     }
 }

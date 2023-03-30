@@ -3,6 +3,7 @@ use crate::nodes::{
     Variable, VariableDecl,
 };
 use crate::types::Type;
+use nom::bytes::complete::take_while;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -12,7 +13,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
-use nom_locate::position;
+use nom_locate::{position, LocatedSpan};
 
 pub fn type_parser(s: Span) -> IResult<Span, Type> {
     alt((
@@ -24,9 +25,17 @@ pub fn type_parser(s: Span) -> IResult<Span, Type> {
     ))(s)
 }
 
-/// "64hoge" -> hoge, <64>
+fn string_parser(s: Span) -> IResult<Span, String> {
+    map(
+        delimited(char('"'), take_while(|c: char| c != '"'), char('"')),
+        |s: LocatedSpan<&str>| s.to_string(),
+    )(s)
+}
+
+/// "64_hoge" -> hoge, <64>
 pub fn const_parser(s: Span) -> IResult<Span, Const> {
     alt((
+        map(string_parser, |s| Const::String(s)),
         map(
             tuple((digit1, char('_'), type_parser)),
             |(n, _, t)| match t {
@@ -284,8 +293,15 @@ pub fn assign_parser(s: Span) -> IResult<Span, Assign> {
 }
 
 pub fn return_parser(s: Span) -> IResult<Span, Expr> {
-    let (s, (_, _, expr, _)) = tuple((tag("return"), multispace1, or_expr_parser, char(';')))(s)?;
-    Ok((s, expr))
+    alt((
+        map(tuple((tag("return"), char(';'))), |(_, _)| {
+            Expr::Const(Const::Unit)
+        }),
+        map(
+            tuple((tag("return"), multispace1, or_expr_parser, char(';'))),
+            |(_, _, expr, _)| expr,
+        ),
+    ))(s)
 }
 
 pub fn if_else_parser(s: Span) -> IResult<Span, IfElse> {

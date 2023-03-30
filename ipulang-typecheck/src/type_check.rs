@@ -21,11 +21,12 @@ impl Env {
     fn new() -> Self {
         let mut functions = HashMap::new();
         // decrare putchar(i32): i32
-        let putchar_type = (vec![Type::Int32], Type::Int32);
-        functions.insert("putchar".to_owned(), putchar_type);
-
+        functions.insert("putchar".to_owned(), (vec![Type::Int32], Type::Int32));
         // decrate getchar(): i32
         functions.insert("getchar".to_owned(), (vec![], Type::Int32));
+        functions.insert("printstr".to_owned(), (vec![Type::String], Type::Unit));
+        functions.insert("printi32".to_owned(), (vec![Type::Int32], Type::Unit));
+        functions.insert("printi64".to_owned(), (vec![Type::Int64], Type::Unit));
 
         Self {
             variables: HashMap::new(),
@@ -76,10 +77,11 @@ trait TypeCheck {
 impl TypeCheck for Const {
     fn type_check(&mut self, env: &mut Env) -> Result<Type> {
         match self {
+            Const::Unit => Ok(Type::Unit),
             Const::I32Const(_) => Ok(Type::Int32),
             Const::I64Const(_) => Ok(Type::Int64),
             Const::BoolConst(_) => Ok(Type::Bool),
-            // Const::String(_) => Ok(Type::String),
+            Const::String(_) => Ok(Type::String),
         }
     }
 }

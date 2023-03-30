@@ -23,11 +23,13 @@ pub enum Op {
 }
 
 /// 定数
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Const {
+    Unit,
     I32Const(i32),
     I64Const(i64),
     BoolConst(bool),
+    String(String),
 }
 
 impl Const {

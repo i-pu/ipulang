@@ -1,7 +1,7 @@
 use anyhow::Result;
 use codegen::Ctx;
 use instructions::register_instructions;
-use ipulang_parser::nodes::Program;
+use ipulang_parser::nodes::{FunctionDecl, Program};
 use operand::Operand;
 use stack_vm::{Builder, Code, FromByteCode, Machine, ToByteCode, WriteManyTable, WriteOnceTable};
 use std::collections::HashMap;
@@ -52,6 +52,6 @@ pub fn execute(bin: &mut &[u8]) {
     let mut machine = Machine::new(code, &constants, &instruction_table);
     machine.jump("main");
     machine.run();
-    println!("ret = {:?}", machine.operand_pop());
-    println!("{:#?}", machine.operand_stack);
+    // println!("ret = {:?}", machine.operand_pop());
+    // println!("{:#?}", machine.operand_stack);
 }

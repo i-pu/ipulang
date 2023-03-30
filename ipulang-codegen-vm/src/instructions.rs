@@ -155,9 +155,9 @@ pub fn register_instructions() -> InstructionTable<Operand> {
     instruction_table.insert(Instruction::new(16, "geq", 0, geq));
     instruction_table.insert(Instruction::new(17, "eq", 0, eq));
     instruction_table.insert(Instruction::new(18, "neq", 0, neq));
-    instruction_table.insert(Instruction::new(17, "or", 0, or));
-    instruction_table.insert(Instruction::new(18, "and", 0, and));
-    instruction_table.insert(Instruction::new(19, "mod", 0, modulo));
+    instruction_table.insert(Instruction::new(19, "or", 0, or));
+    instruction_table.insert(Instruction::new(20, "and", 0, and));
+    instruction_table.insert(Instruction::new(21, "mod", 0, modulo));
 
     instruction_table
 }

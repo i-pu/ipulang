@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::operand::Operand;
-use ipulang_parser::nodes::{Const, Expr, FunctionDecl, Stmt, Stmts};
+use ipulang_parser::nodes::{Assign, Const, Expr, FunctionDecl, Stmt, Stmts, VariableDecl};
 use stack_vm::Builder;
 
 pub(crate) trait Codegen {
@@ -27,6 +27,24 @@ impl Codegen for Stmts<'_> {
     }
 }
 
+impl Codegen for VariableDecl<'_> {
+    fn code_gen(&self, ctx: &mut Ctx<'_>, builder: &mut Builder<Operand>) {
+        if let Some(init) = self.init.as_ref() {
+            init.code_gen(ctx, builder);
+        } else {
+            builder.push("push", vec![Operand::Imm(0)]);
+        };
+        builder.push("store", vec![Operand::Label(self.id.clone())]);
+    }
+}
+
+impl Codegen for Assign<'_> {
+    fn code_gen(&self, ctx: &mut Ctx<'_>, builder: &mut Builder<Operand>) {
+        self.right.code_gen(ctx, builder);
+        builder.push("store", vec![Operand::Label(self.left.clone())]);
+    }
+}
+
 impl Codegen for Stmt<'_> {
     fn code_gen(&self, ctx: &mut Ctx, builder: &mut Builder<Operand>) {
         match self {
@@ -35,15 +53,8 @@ impl Codegen for Stmt<'_> {
                 ret.code_gen(ctx, builder);
                 builder.push("ret", vec![]);
             }
-            Stmt::VariableDecl(decl) => {
-                if let Some(init) = decl.init.as_ref() {
-                    init.code_gen(ctx, builder);
-                } else {
-                    builder.push("push", vec![Operand::Imm(0)]);
-                };
-                builder.push("store", vec![Operand::Label(decl.id.clone())]);
-            }
-            Stmt::Assign(_) => todo!(),
+            Stmt::VariableDecl(decl) => decl.code_gen(ctx, builder),
+            Stmt::Assign(assign) => assign.code_gen(ctx, builder),
             Stmt::IfElse(ifelse) => {
                 // <cond>
                 // jump_if_zero .failure (has else-branch) .end (otherwise)
@@ -71,7 +82,28 @@ impl Codegen for Stmt<'_> {
                 }
                 builder.label(&end_label);
             }
-            Stmt::For(_) => todo!(),
+            Stmt::For(fr) => {
+                //  <decl>
+                // .start:
+                //  <stmts>
+                //  <cond>
+                //  jump_if_zero .end
+                //  <assign>
+                //  jump .start
+                // .end:
+                //  ...
+                fr.var_decl.code_gen(ctx, builder);
+                let i = builder.labels.keys().len();
+                let start_label = format!("for_{}_start", i);
+                let end_label = format!("for_{}_end", i);
+                builder.label(&start_label);
+                fr.cond.code_gen(ctx, builder);
+                builder.push("jump_if_zero", vec![Operand::Label(end_label.clone())]);
+                fr.stmts.code_gen(ctx, builder);
+                fr.assign.code_gen(ctx, builder);
+                builder.push("jump", vec![Operand::Label(start_label.clone())]);
+                builder.label(&end_label);
+            }
         }
     }
 }

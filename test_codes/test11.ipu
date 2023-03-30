@@ -1,9 +1,7 @@
 fn main(): i32 {
     var a: i32 = 0;
-    for (var i: i32 = 0; i < 24; i = i + 1;) {
+    for (var i: i32 = 0; i <= 10; i = i + 2;) {
         a = a + i;
-        putchar(48 + i);
-        putchar(10);
     }
     return a;
 }

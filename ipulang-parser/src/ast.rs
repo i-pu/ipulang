@@ -1,5 +1,8 @@
-use std::str::FromStr;
-
+use crate::nodes::{
+    Assign, BinOp, Call, Const, Expr, For, FunctionDecl, IfElse, Op, Program, Span, Stmt, Stmts,
+    Variable, VariableDecl,
+};
+use crate::types::Type;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -9,15 +12,7 @@ use nom::{
     sequence::{delimited, preceded, terminated, tuple},
     IResult,
 };
-
 use nom_locate::position;
-
-use crate::nodes::{
-    Assign, BinOp, Call, Const, Expr, For, FunctionDecl, IfElse, Op, Program, Span, Stmt, Stmts,
-    Variable, VariableDecl,
-};
-
-use crate::types::Type;
 
 pub fn type_parser(s: Span) -> IResult<Span, Type> {
     alt((
@@ -46,21 +41,21 @@ pub fn const_parser(s: Span) -> IResult<Span, Const> {
     ))(s)
 }
 
-// 変数名
+/// 変数名
 pub fn var_name_parser<'a>(s: Span<'a>) -> IResult<Span, (Span, String)> {
     let (s, (a, b)) = tuple((alpha1, alphanumeric0))(s)?;
     let var_name = a.fragment().to_string() + b.fragment();
     Ok((s, (s, var_name)))
 }
 
-// 変数
+/// 変数
 pub fn var_parser(s: Span) -> IResult<Span, Variable> {
     let (s, name) = var_name_parser(s)?;
     let (_, pos) = position(s)?;
     Ok((s, Variable::new(pos, name.1, Type::Unknown)))
 }
 
-// 変数宣言
+/// 変数宣言
 pub fn var_decl_parser(s: Span) -> IResult<Span, VariableDecl> {
     let (s, (_, _, name, _, _, _, typ, _, opt_init, _)) = tuple((
         tag("var"),
@@ -118,6 +113,7 @@ pub fn factor_parser(s: Span) -> IResult<Span, Expr> {
     )(s)
 }
 
+/// `factor` (*/% `multiplicative_expr`)
 pub fn multiplicative_expr_parser(s: Span) -> IResult<Span, Expr> {
     let (s, (factor, option)) = tuple((
         factor_parser,
@@ -145,6 +141,7 @@ pub fn multiplicative_expr_parser(s: Span) -> IResult<Span, Expr> {
     }
 }
 
+/// `multiplicative_expr` (+ `additive_expr`)
 pub fn additive_expr_parser(s: Span) -> IResult<Span, Expr> {
     let (s, (multi, option)) = tuple((
         multiplicative_expr_parser,
@@ -171,6 +168,7 @@ pub fn additive_expr_parser(s: Span) -> IResult<Span, Expr> {
     }
 }
 
+/// `>=`, `<=`, `>`, `<`
 pub fn relational_op_parser(s: Span) -> IResult<Span, Op> {
     let (s, c) = delimited(
         multispace0,
@@ -188,6 +186,7 @@ pub fn relational_op_parser(s: Span) -> IResult<Span, Op> {
     Ok((s, op))
 }
 
+/// `additive_expr` (== `relational_expr`)
 pub fn releational_expr_parser(s: Span) -> IResult<Span, Expr> {
     let (s, (add, option)) = tuple((
         additive_expr_parser,
@@ -204,6 +203,7 @@ pub fn releational_expr_parser(s: Span) -> IResult<Span, Expr> {
     }
 }
 
+/// `==`, `!=`
 pub fn equality_op_parser(s: Span) -> IResult<Span, Op> {
     let (s, c) = delimited(multispace0, alt((tag("=="), tag("!="))), multispace0)(s)?;
     let (s, pos) = position(s)?;
@@ -215,6 +215,7 @@ pub fn equality_op_parser(s: Span) -> IResult<Span, Op> {
     Ok((s, op))
 }
 
+/// `relational_expr` (== `equality_expr`)
 pub fn equality_expr_parser(s: Span) -> IResult<Span, Expr> {
     let (s, (rel, option)) = tuple((
         releational_expr_parser,
@@ -231,6 +232,7 @@ pub fn equality_expr_parser(s: Span) -> IResult<Span, Expr> {
     }
 }
 
+/// `equality` (&& `and_expr`)
 pub fn and_expr_parser(s: Span) -> IResult<Span, Expr> {
     let (s, (rel, option)) = tuple((
         equality_expr_parser,
@@ -250,6 +252,7 @@ pub fn and_expr_parser(s: Span) -> IResult<Span, Expr> {
     }
 }
 
+/// `and_expr` (|| `or_expr`)
 pub fn or_expr_parser(s: Span) -> IResult<Span, Expr> {
     map(
         tuple((

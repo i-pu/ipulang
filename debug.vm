@@ -1,0 +1,22 @@
+@0 = Imm(0)
+@1 = Imm(6)
+@2 = Label("a")
+@3 = Imm(2)
+@4 = Imm(3)
+@5 = Label("b")
+
+.a:
+	push @0
+	ret
+
+.main:
+	push @1
+	store @2
+	load @2
+	push @3
+	push @4
+	div
+	add
+	store @5
+	load @5
+	ret

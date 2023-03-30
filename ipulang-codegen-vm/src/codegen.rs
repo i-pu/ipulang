@@ -1,15 +1,6 @@
-use std::sync::atomic::AtomicUsize;
-
 use crate::operand::Operand;
 use ipulang_parser::nodes::{Const, Expr, FunctionDecl, Stmt};
 use stack_vm::Builder;
-
-const COUNT: AtomicUsize = AtomicUsize::new(0);
-
-fn issue_label() -> Operand {
-    let i = COUNT.fetch_add(1, std::sync::atomic::Ordering::Acquire);
-    Operand::Label(format!("%{}", i))
-}
 
 pub(crate) trait Codegen {
     fn code_gen(&self, builder: &mut Builder<Operand>);
@@ -17,9 +8,7 @@ pub(crate) trait Codegen {
 
 impl Codegen for FunctionDecl<'_> {
     fn code_gen(&self, builder: &mut Builder<Operand>) {
-        if self.id != "main" {
-            builder.label(self.id.as_str());
-        }
+        builder.label(self.id.as_str());
         for stmt in self.stmts.0.iter() {
             stmt.code_gen(builder);
         }
@@ -30,7 +19,10 @@ impl Codegen for Stmt<'_> {
     fn code_gen(&self, builder: &mut Builder<Operand>) {
         match self {
             Stmt::Expr(expr) => expr.code_gen(builder),
-            Stmt::Return(_) => todo!(),
+            Stmt::Return(ret) => {
+                ret.code_gen(builder);
+                builder.push("ret", vec![]);
+            }
             Stmt::VariableDecl(decl) => {
                 if let Some(init) = decl.init.as_ref() {
                     init.code_gen(builder);
@@ -68,9 +60,15 @@ impl Codegen for Expr<'_> {
                     ipulang_parser::nodes::Op::Add => {
                         builder.push("add", vec![]);
                     }
-                    ipulang_parser::nodes::Op::Sub => todo!(),
-                    ipulang_parser::nodes::Op::Mul => todo!(),
-                    ipulang_parser::nodes::Op::Div => todo!(),
+                    ipulang_parser::nodes::Op::Sub => {
+                        builder.push("sub", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Mul => {
+                        builder.push("mul", vec![]);
+                    }
+                    ipulang_parser::nodes::Op::Div => {
+                        builder.push("div", vec![]);
+                    }
                     ipulang_parser::nodes::Op::Mod => todo!(),
                 }
             }

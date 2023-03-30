@@ -24,7 +24,6 @@ pub fn compile(code: String) -> Result<Vec<u8>> {
     let code = Span::new(code.as_str());
     let ast = program_parser(code);
     let ast = type_check(ast)?;
-    dbg!(&ast);
     let ir = code_gen(ast)?;
     Ok(ir)
 }
